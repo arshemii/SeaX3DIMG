@@ -64,8 +64,8 @@ def parse_calibration(calib_path):
 
 def parse_label(label_path, cfg):
     
-    accepted_occlusion = cfg.data.filter["occl"]
-    trunc_threshold = cfg.data.filter["trunc"]
+    accepted_occlusion = cfg.data.filter[0]["occl"]
+    trunc_threshold = cfg.data.filter[0]["trunc"]
     cl0 = cfg.data.cl0
     cl1 = cfg.data.cl1
     cl2 = cfg.data.cl2

@@ -17,6 +17,9 @@ def config_generator():
     cfg.model.back = CN()
     cfg.model.sx3d = CN()
     cfg.model.head = CN()
+    cfg.mode = CN()
+    cfg.loss = CN()
+    
     
     cfg.log_dir = './logging_dir'
     cfg.logging = False
@@ -44,10 +47,10 @@ def config_generator():
     ####################################
     
     cfg.data.type = 'random' # other option :'sequential'
-    cfg.data.path = './kitti/'
-    cfg.data.filter = {
+    cfg.data.path = './dataset/'
+    cfg.data.filter = [{
         "trunc": 0.8,
-        "occl": [0, 1, 2]}
+        "occl": [0, 1, 2]}]
     
     cfg.camera.P_l = None
     
@@ -114,4 +117,11 @@ def config_generator():
                             "FINAL_CONV_KERNEL": 1}]
 
 
+    cfg.loss.loss_1 = [{"name": "cr3d",
+                        }]
+    
+    
     return cfg
+
+
+
