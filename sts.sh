@@ -1,32 +1,40 @@
 #!/bin/bash
 
-# A script to auto-commit and push all changes to the current Git branch
+# A script to auto-commit and push all changes to GitHub with pull safety
 
-# Step 1: Print status and branch
-echo "🔍 Checking current branch and status..."
+echo "🔍 Checking current branch..."
 branch=$(git branch --show-current)
 echo "📌 Current branch: $branch"
+
+# Show current status
 git status
 
-# Step 2: Stage all changes (including new and deleted files)
+# Step 1: Stage all changes
 echo "🌀 Staging all changes..."
 git add .
 
-# Step 3: Commit with a timestamped message
+# Step 2: Commit with timestamp
 commit_msg="Auto-commit on $(date '+%Y-%m-%d %H:%M:%S')"
-git commit -m "$commit_msg"
+git commit -m "$commit_msg" 2>/dev/null
 
-# Step 4: Print confirmation
-echo "✅ Commit completed with message: '$commit_msg'"
+# Check if commit was successful (to avoid empty commits)
+if [ $? -eq 0 ]; then
+  echo "✅ Commit completed with message: '$commit_msg'"
+else
+  echo "⚠️ No changes to commit."
+fi
 
-# Step 5: Push to remote branch
+# Step 3: Pull before push (merge if needed)
+echo "📥 Pulling latest from origin/ImgOnly..."
+git pull origin "$branch" --rebase
+
+# Step 4: Push changes
 echo "🚀 Pushing to GitHub..."
-git push origin ImgOnly
+git push origin "ImgOnly"
 
-# Step 6: Show final log
+# Step 5: Show latest commit
 echo "📜 Latest commit log:"
 git log -1 --oneline
 
-# Final message
-echo "✅ Done! All changes are pushed to GitHub on branch '$branch'."
+echo "✅ All done on branch 'ImgOnly'!"
 
