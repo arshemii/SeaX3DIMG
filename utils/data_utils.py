@@ -89,7 +89,7 @@ def parse_label(label_path, cfg):
                 continue
             
             if det[0] in cl_ignore:
-                continue
+                category = -1
             else:
                 if det[0] in cl0:
                     category = 0

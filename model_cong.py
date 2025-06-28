@@ -47,7 +47,7 @@ def config_generator():
     ####################################
     
     cfg.data.type = 'random' # other option :'sequential'
-    cfg.data.path = './dataset/'
+    cfg.data.path = '../dataset/'
     cfg.data.filter = [{
         "trunc": 0.8,
         "occl": [0, 1, 2]}]
@@ -60,6 +60,11 @@ def config_generator():
     
     cfg.radar_fusion = False
     cfg.model.sx3d.init_weight = True
+    
+    # dataset range:
+        # x--> -40 to +40
+        # y--> -0.64 to +3.86
+        # z --> +94
     
     cfg.grid_size = (20.0, 12.0, 42.0)
     cfg.grid_unc = (0.2, 0.4, 0.6)
@@ -74,8 +79,8 @@ def config_generator():
     cfg.data.cl4 = ["DontCare", "Tram"]  # no need to predict, must be removed also from data labeling
     cfg.data.cl5 = ["Misc", "Person_sitting"] # no need to predict, must be removed also from data labeling
     
-    cfg.data.mean = np.array([0.485, 0.456, 0.406])
-    cfg.data.std = np.array([0.229, 0.224, 0.225])
+    cfg.data.mean = [np.array([0.485, 0.456, 0.406])]
+    cfg.data.std = [np.array([0.229, 0.224, 0.225])]
     cfg.data.img_layout = 'rgb'
     
     
@@ -117,8 +122,7 @@ def config_generator():
                             "FINAL_CONV_KERNEL": 1}]
 
 
-    cfg.loss.loss_1 = [{"name": "cr3d",
-                        }]
+    cfg.loss.weight = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
     
     
     return cfg

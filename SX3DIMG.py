@@ -158,7 +158,7 @@ class SX3DIMG(nn.Module):
         
         voxel = F.grid_sample(tensor ,self.grid_flat,
                             mode='bilinear', align_corners=True)
-        voxel = voxel.reshape(1, N_F, self.grid_resolution[1], self.grid_resolution[0], self.grid_resolution[2])
+        voxel = voxel.reshape(1, N_F, self.grid_resolution[0], self.grid_resolution[1], self.grid_resolution[2])
         
         return voxel
     
@@ -217,7 +217,7 @@ class SX3DIMG(nn.Module):
         else:
             raise NotImplementedError("other representation ehad methods!")
             
-        return out, output_memory
+        return out, output_memory, self.grid
     
     def init_weights(self):
         raise NotImplementedError("not yet implemented")
