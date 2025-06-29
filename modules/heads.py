@@ -14,10 +14,7 @@ class head_box_3d(nn.Module):
         super(head_box_3d, self).__init__()
         self.cfg = cfg
         self.is_conf = self.cfg.model.sx3d.is_confidence
-        if self.is_conf:
-            self.out_ch = self.cfg.model.num_class + 7 + 1 # with confidence score
-        else:
-            self.out_ch = self.cfg.model.num_class + 7 # without confidence score
+        self.out_ch = self.cfg.model.num_class + 7 + 1 # with confidence score
             
         self.branch1 = nn.Sequential(nn.Conv3d(256, 128, kernel_size=3, padding=1),
                                         nn.BatchNorm3d(128),
@@ -58,10 +55,7 @@ class head_box_2d_bev(nn.Module):
         self.cfg = cfg
         self.is_conf = self.cfg.model.sx3d.is_confidence
         self.h_resolution = int(round(self.cfg.grid_size[1]/self.cfg.grid_unc[1]))
-        if self.is_conf:
-            self.out_ch = self.cfg.model.num_class + 5 + 1 # with confidence score
-        else:
-            self.out_ch = self.cfg.model.num_class + 5 # without confidence score
+        self.out_ch = self.cfg.model.num_class + 5 + 1 # with confidence score
             
         self.branch_in_ch = 256
         self.branch_out_ch = 32

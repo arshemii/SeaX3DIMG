@@ -20,7 +20,8 @@ def config_generator():
     cfg.mode = CN()
     cfg.loss = CN()
     
-    cfg.num_batch = 4
+    cfg.num_batch = 8
+    cfg.num_worker = 4
     
     cfg.log_dir = './logging_dir'
     cfg.logging = False
@@ -44,7 +45,7 @@ def config_generator():
     ################################
     
     cfg.model.sx3d.use_checkpoint = False
-    cfg.model.sx3d.checkpoint = 'Path to checkpoint'
+    cfg.model.sx3d.checkpoint = './checkpoints/'
     ####################################
     
     cfg.data.type = 'random' # other option :'sequential'
@@ -123,7 +124,7 @@ def config_generator():
                             "FINAL_CONV_KERNEL": 1}]
 
 
-    cfg.loss.weight = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    cfg.loss.weight = [1.0, 1.0, 0.15, 0.05, 0.2]
     cfg.loss.alpha = 0.25
     cfg.loss.gamma = 2.0
     

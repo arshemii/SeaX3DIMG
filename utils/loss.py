@@ -7,6 +7,7 @@ Created on Thu Jun 26 21:14:47 2025
 """
 import torch.nn as nn
 import torch
+import numpy as np
 
 def assign_gt_to_voxels(grid, gtl, ignore_class_id=-1):
     """
@@ -67,10 +68,11 @@ class loss_3d(nn.Module):
         super(loss_3d, self).__init__()
         self.cfg = cfg
         self.num_c = self.cfg.model.num_class
-        self.loss_weights = self.cfg.loss.weght
+        self.loss_weights = self.cfg.loss.weight
         self.B = self.cfg.num_batch
         self.alpha = self.cfg.loss.alpha
         self.gamma = self.cfg.loss.gamma
+        self.loss = {}
         
         
     def object_conf_loss(self, pred_obj_logits, voxel_assignments):
@@ -96,23 +98,85 @@ class loss_3d(nn.Module):
         """
         pred_cls_logits: [B, num_classes, W, H, D]
         center_voxels: list of per-batch lists of [(i, j, k, gt_idx)]
+                        First list is for all batch, second list is for all dets in a frame
+        """
+        
+        loss = 0.0
+        count = 0
+        for b in range(self.B):
+            if len(gtl[b]) == 0:
+                continue
+            else:
+                for (i, j, k, gt_idx) in center_voxels[b]:
+                    # No need for one hot, should be [2]
+                    target_cls = torch.tensor([gtl[b][gt_idx]['category']], device=pred_cls_logits.device)
+                    pred = pred_cls_logits[b, :, i, j, k].unsqueeze(0)  # [1, C]
+                    # Why not softmax? No softmax, raw logits
+        
+                    ce = nn.functional.cross_entropy(pred, target_cls, reduction='none')
+                    pt = torch.exp(-ce)
+                    focal_loss = self.alpha * (1 - pt) ** self.gamma * ce
+                    loss += focal_loss.mean()
+                    count += 1
+        return loss / max(count, 1)
+    
+    def center_loss(self, pred_offsets, center_voxels, gtl, grid):
+        """
+        pred_offsets: [B, 3, W, H, D]
+        grid: [3, W, H, D]
+        """
+        
+        loss = 0.0
+        count = 0
+        for b in range(self.B):
+            if len(gtl[b]) == 0:
+                continue
+            else:
+                for (i, j, k, gt_idx) in center_voxels[b]:
+                    voxel_center = grid[:, i, j, k]
+                    pred_offset = pred_offsets[b, :, i, j, k]
+                    pred_center = voxel_center + pred_offset
+        
+                    gt_center = torch.tensor(gtl[b][gt_idx]['bbox3d'][3:6], device=pred_offsets.device)
+                    loss += nn.functional.l1_loss(pred_center, gt_center)
+                    count += 1
+        return loss / max(count, 1)
+    
+    def dimension_loss(self, pred_dims, center_voxels, gtl):
+        """
+        pred_dims: [B, 3, W, H, D]
+        """
+        
+        loss = 0.0
+        count = 0
+        for b in range(self.B):
+            if len(gtl[b]) == 0:
+                continue
+            else:
+                for (i, j, k, gt_idx) in center_voxels[b]:
+                    pred = pred_dims[b, :, i, j, k]
+                    gt = torch.tensor(gtl[b][gt_idx]['bbox3d'][0:3], device=pred.device)
+                    loss += nn.functional.l1_loss(pred, gt)
+                    count += 1
+        return loss / max(count, 1)
+    
+    def yaw_loss(self, pred_yaw, center_voxels, gtl):
+        """
+        pred_yaw: [B, 1, W, H, D]
         """
         loss = 0.0
         count = 0
-        for b in range(len(center_voxels)):
-            for (i, j, k, gt_idx) in center_voxels[b]:
-                target_cls = torch.tensor(gtl[b][gt_idx]['category'], device=pred_cls_logits.device)
-                pred = pred_cls_logits[b, :, i, j, k].unsqueeze(0)  # [1, C]
-    
-                ce = nn.functional.cross_entropy(pred, target_cls.unsqueeze(0), reduction='none')
-                pt = torch.exp(-ce)
-                focal_loss = self.alpha * (1 - pt) ** self.gamma * ce
-                loss += focal_loss.mean()
-                count += 1
+        for b in range(self.B):
+            if len(gtl[b]) == 0:
+                continue
+            else:
+                for (i, j, k, gt_idx) in center_voxels[b]:
+                    pred = pred_yaw[b, 0, i, j, k]
+                    gt = torch.tensor(gtl[b][gt_idx]['bbox3d'][6], device=pred.device)
+                    loss += nn.functional.smooth_l1_loss(pred, gt)
+                    count += 1
         return loss / max(count, 1)
 
-
-    
     def forward(self, prediction, gtl, grid):
         """
         prediction is:
@@ -122,7 +186,7 @@ class loss_3d(nn.Module):
             pred[num_class + 4 : num_class + 7] = object dimensions,
             pred[-1] = object box yaw angle
             
-        gtl is is a list where for gt in gtl:
+        gtl is is a list (length is num_batch) where for gt in gtl[index]:
             gt['category'] = object class (zero to num_classes-1 and -1 for not important objects)
             gt['bbox3d'] = order is: h, w, l, cx, cy, cz, yaw
             
@@ -131,44 +195,113 @@ class loss_3d(nn.Module):
             
         *** Prediction comes like [n, out_ch, w_res, h_res, d_res]
         """
-        assert self.B == prediction.shape[0]
+        # TODO: what happens when no detection is there?
+        # change to consider only objectness loss, and the rest are zero
         
         # first part: a function to match each gt detection to corresponding voxels and find which voxel is closest to the box center
         assignments = []
         c_voxels = []
         for i in range(self.B):
-            ass, center_voxels = assign_gt_to_voxels(grid, gtl)  # shape: (res_w, res_h, res_d)
+            ass, center_voxels = assign_gt_to_voxels(grid, gtl[i])  # shape of ass: (res_w, res_h, res_d)
             assignments.append(ass)
             c_voxels.append(center_voxels)
                 
+        assert len(c_voxels) == len(gtl) and \
+                len(gtl) == self.B and \
+                len(prediction) == self.B
+        
         # Second part: objectness loss
-        obj_conf = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments)
+        self.loss['obj_conf'] = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments)
         
         # Third part: class loss (might be useful if focal loss is used)
+        self.loss['cls_loss'] = self.classification_loss(prediction[:, 0:self.num_c], c_voxels, gtl)
         
+        # Forth part: bbox center loss
+        self.loss['center_loss'] = self.center_loss(prediction[:, self.num_c+1 : self.num_c+4],
+                                       c_voxels, gtl, grid)
         
-        # Forth part: add bbox offset to the voxel center for bbox center position
+        # Fifth part: bbox dim loss
+        self.loss['dim_loss'] = self.dimension_loss(prediction[:, self.num_c+4: self.num_c+7],
+                                       c_voxels, gtl)
         
-        
-        # Fifth part: bbox center loss
-        
-        
-        # Sixth part: bbox dim loss
-        
-        
-        # Seventh part: bbox orientation loss
-        
-        
+        # Sixth part: yaw angle loss
+        # Any normalization on each term? No, just weights
+        assert prediction[:, self.num_c+7:].shape[1] == 1
+        self.loss['yaw_angle_loss'] = self.yaw_loss(prediction[:, self.num_c+7:], c_voxels, gtl)
+                
         # Total loss: Sum of all loss considering their importance based on self.loss_weights
+        self.loss['total'] = self.loss_weights[0]*self.loss['obj_conf'] + \
+                                self.loss_weights[1]*self.loss['cls_loss'] + \
+                                self.loss_weights[2]*self.loss['center_loss'] + \
+                                self.loss_weights[3]*self.loss['dim_loss'] + \
+                                self.loss_weights[4]*self.loss['yaw_angle_loss']
+
+        return self.loss
+    
+    def accumulate_loss(self):
+        raise NotImplementedError("To accumulate each iteration and so so so on")
         
         
-        """
-        final_loss = {"obj_loss": objectness_loss,
-                      "class_loss": class_loss,
-                      "pose_loss": pose_loss,
-                      "dim_loss": dim_loss,
-                      "orn_loss": orn_loss,
-                      "total_loss": total_loss}
-        
-        return final_loss
-        """
+
+
+def test_loss_function():
+    from model_cong import config_generator
+    cfg = config_generator()
+    
+    dW, dH, dD = (20.0, 12.0, 42.0)
+    voxel_size = (0.2, 0.4, 0.6)
+    
+    # Compute grid size
+    W = int(round(dW / voxel_size[0]))
+    H = int(round(dH / voxel_size[1]))
+    D = int(round(dD / voxel_size[2]))
+
+    print(f"Grid size: W={W}, H={H}, D={D}")
+
+    # Generate voxel grid in real-world coordinates [3, W, H, D]
+    x = torch.arange(W).float() * voxel_size[0]
+    y = torch.arange(H).float() * voxel_size[1]
+    z = torch.arange(D).float() * voxel_size[2]
+    grid = torch.stack(torch.meshgrid(x, y, z, indexing='ij'), dim=0)
+
+    # Prepare prediction tensor
+    B = cfg.num_batch
+    C = cfg.model.num_class
+    out_ch = C + 1 + 3 + 3 + 1  # class + objectness + offset + size + yaw
+    pred = torch.zeros((B, out_ch, W, H, D))
+
+    # Fill with synthetic values
+    pred[:, :C] = torch.randn(B, C, W, H, D).clamp(-2, 2)  # class logits
+    pred[:, C] = torch.randn(B, W, H, D).clamp(-2, 2)      # objectness logit
+    pred[:, C+1:C+4] = (torch.rand(B, 3, W, H, D) - 0.5) * torch.tensor(voxel_size).reshape(1, 3, 1, 1, 1)
+    pred[:, C+4:C+7] = torch.rand(B, 3, W, H, D) * 3 + 1  # dimensions in [1, 4] m
+    pred[:, -1] = torch.rand(B, W, H, D) * np.pi * 2 - np.pi  # yaw in [-π, π]
+
+    # Generate synthetic ground truth
+    gtl = []
+    for b in range(B):
+        num_obj = np.random.randint(1, 6)  # 1 to 5 objects
+        objs = []
+        for _ in range(num_obj):
+            category = np.random.randint(0, C)
+            cx = np.random.rand() * dW
+            cy = np.random.rand() * dH
+            cz = np.random.rand() * dD
+            h, w, l = np.random.rand(3) * 2 + 1  # [1, 3] meters
+            yaw = np.random.rand() * 2 * np.pi - np.pi
+            bbox3d = np.array([h, w, l, cx, cy, cz, yaw], dtype=np.float32)
+            objs.append({
+                'category': category,
+                'bbox2d': None,
+                'bbox3d': bbox3d,
+                'truncation': None,
+                'occlusion': None,
+                'angle_observation': None
+            })
+        gtl.append(objs)
+
+    # Instantiate and compute loss
+    loss_fn = loss_3d(cfg)
+    loss_output = loss_fn(pred, gtl, grid)
+
+    return grid, pred, gtl, loss_output
