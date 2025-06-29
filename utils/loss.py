@@ -73,7 +73,7 @@ class loss_3d(nn.Module):
         self.gamma = self.cfg.loss.gamma
         
         
-    def object_conf(self, pred_obj_logits, voxel_assignments):
+    def object_conf_loss(self, pred_obj_logits, voxel_assignments):
         """
         pred_obj_logits: [B, 1, W, H, D]
         voxel_assignments: a list of tensors with lenght = B and -1=bg, -2=ignored, >=0=object
@@ -91,6 +91,26 @@ class loss_3d(nn.Module):
             focal_loss = self.alpha * (1 - pt) ** self.gamma * bce
             loss += focal_loss.mean()
         return loss / self.B
+    
+    def classification_loss(self, pred_cls_logits, center_voxels, gtl):
+        """
+        pred_cls_logits: [B, num_classes, W, H, D]
+        center_voxels: list of per-batch lists of [(i, j, k, gt_idx)]
+        """
+        loss = 0.0
+        count = 0
+        for b in range(len(center_voxels)):
+            for (i, j, k, gt_idx) in center_voxels[b]:
+                target_cls = torch.tensor(gtl[b][gt_idx]['category'], device=pred_cls_logits.device)
+                pred = pred_cls_logits[b, :, i, j, k].unsqueeze(0)  # [1, C]
+    
+                ce = nn.functional.cross_entropy(pred, target_cls.unsqueeze(0), reduction='none')
+                pt = torch.exp(-ce)
+                focal_loss = self.alpha * (1 - pt) ** self.gamma * ce
+                loss += focal_loss.mean()
+                count += 1
+        return loss / max(count, 1)
+
 
     
     def forward(self, prediction, gtl, grid):
@@ -122,7 +142,7 @@ class loss_3d(nn.Module):
             c_voxels.append(center_voxels)
                 
         # Second part: objectness loss
-        obj_conf = self.object_conf(prediction[:, self.num_c:self.num_c+1], assignments)
+        obj_conf = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments)
         
         # Third part: class loss (might be useful if focal loss is used)
         
