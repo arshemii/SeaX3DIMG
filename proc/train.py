@@ -61,18 +61,28 @@ class Trainer:
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         for batch_idx, batch in pbar:
             inputs, targets = batch
-            inputs = inputs.to(self.device)
-            # Assuming targets is a dict or list of tensors that also go to device
+            
+            # input has four images (only in training):
+                # left pair: img in t-dt and img in t
+                # right pair: img in t-dt and img in t
+            inputs = [t.to(self.device) for t in inputs]
+            
+            # target is a list
             if isinstance(targets, dict):
-                targets = {k: v.to(self.device) for k, v in targets.items()}
-            elif isinstance(targets, (list, tuple)):
+                raise NotImplementedError("Target must be list for integration")
+            elif isinstance(targets, tuple):
+                raise NotImplementedError("Target must be list for integration")
+            elif isinstance(targets, list):
                 targets = [t.to(self.device) for t in targets]
             else:
-                targets = targets.to(self.device)
+                raise NotImplementedError("Target must be list for integration")
             
             self.optimizer.zero_grad()
             
-            outputs = self.model(inputs)
+            #create temporal memory for both left and right image from t - dt
+            temporal_l, temporal_r = self.model.creat_memory(inputs[1], inputs[3])
+            outputs = self.model(inputs[0], inputs[2], temporal_l, temporal_r)
+            
             loss = self.loss_fn(outputs, targets)
             loss.backward()
             self.optimizer.step()
