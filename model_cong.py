@@ -128,6 +128,8 @@ def config_generator():
     cfg.loss.alpha = 0.25
     cfg.loss.gamma = 2.0
     
+    cfg.eval_in_training = True  # to evaluate in each epoch
+    cfg.num_epochs = 100
     
     return cfg
 
