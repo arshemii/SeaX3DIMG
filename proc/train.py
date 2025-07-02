@@ -38,6 +38,8 @@ class Trainer:
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.grid = grid
+        assert self.grid.shape[-1] == 0
+
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
         self.checkpoint_dir = self.cfg.model.sx3d.checkpoint
@@ -95,7 +97,7 @@ class Trainer:
                 if epoch % 4 == 0:
                     eval_pair.append([outputs, targets])
             
-            loss = self.loss_fn(outputs, targets)
+            loss = self.loss_fn(outputs, targets, self.grid)
             loss['total'].backward()
             self.optimizer.step()
             
@@ -107,7 +109,7 @@ class Trainer:
         
         if self.eval_in_training:
             if epoch % 4 == 0:
-                metric_values = self.metric_module.eval_from_prediction(eval_pair)
+                metric_values = self.metric_module.eval_from_prediction(eval_pair, self.grid)
         else:
             metric_values = None
         
@@ -138,7 +140,7 @@ class Trainer:
                 eval_pair.append([outputs.cpu(), targets])
         
         # Assuming your metric_module takes lists of outputs and targets
-        metrics = self.metric_module.eval_from_prediction(eval_pair)
+        metrics = self.metric_module.eval_from_prediction(eval_pair, self.grid)
         return metrics
     
     def save_epoch_log(self, epoch, loss, metrics, train_time):
