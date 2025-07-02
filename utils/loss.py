@@ -199,6 +199,7 @@ class loss_3d(nn.Module):
         # change to consider only objectness loss, and the rest are zero
         
         # first part: a function to match each gt detection to corresponding voxels and find which voxel is closest to the box center
+        assert grid.shape[-1] == 3
         assignments = []
         c_voxels = []
         for i in range(self.B):
