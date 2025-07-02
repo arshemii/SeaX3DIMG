@@ -66,7 +66,7 @@ class Trainer:
             if epoch % 4 == 0:
                 eval_pair = []
                 
-        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch} and loss {avg_loss:.2}")
+        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         for batch_idx, batch in pbar:
             inputs, targets = batch
             
@@ -96,15 +96,13 @@ class Trainer:
                     eval_pair.append([outputs, targets])
             
             loss = self.loss_fn(outputs, targets)
-            # TODO: what is backward??
-            loss.backward()
+            loss['total'].backward()
             self.optimizer.step()
             
-            running_loss += loss.item()
+            running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
             
-            # TODO: should I remove loss from pbar before loop?
-            pbar.set_postfix({'loss': f"{avg_loss:.4f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
+            pbar.set_postfix({'loss': f"{avg_loss:.2f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
         
         
         if self.eval_in_training:
