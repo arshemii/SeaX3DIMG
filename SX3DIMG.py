@@ -21,9 +21,12 @@ class SX3DIMG(nn.Module):
     def __init__(self, cfg, is_train_backbone):
         super(SX3DIMG, self).__init__()
         self.cfg = cfg
+        self.debug = self.cfg.debug
         self.logs = self.cfg.logging
         # self.logger = setup_logger('SX3DIMG_logs', self.cfg.log_dir)
         self.is_train_backbone = is_train_backbone
+        
+        self.device = self.cfg.device[0]
         
         self.h, self.w = self.cfg.model.in_size
         
@@ -33,7 +36,6 @@ class SX3DIMG(nn.Module):
         
         
         if self.cfg.camera.P_l is not None:
-            assert self.cfg.data.type == 'sequential'
             self.P_l = cfg.camera.P_l
             self.grid_img = cam_to_img(self.grid, self.P_l)
             self.grid_flat = grid_for_sample(self.grid_img, (self.h, self.w))
@@ -63,7 +65,6 @@ class SX3DIMG(nn.Module):
         self.bn_match_2 = nn.BatchNorm2d(num_features=256)
         
         self.relu_create_mem = nn.ReLU()
-        self.relu_create_art_mem = nn.ReLU()
         self.relu_matching = nn.ReLU()
         
         
@@ -82,53 +83,16 @@ class SX3DIMG(nn.Module):
                               self.cfg.model.max_disp, 1)
 
         
-    def _create_memory(self, tensor_f):
-        feat_l = self.conv2d_memory(tensor_f[0])
-        feat_r = self.conv2d_memory(tensor_f[1])
+    def create_memory(self, img_l):
+        left_f_mem = self.backbone(img_l)
+        
+        feat_l = self.conv2d_memory(left_f_mem)
         
         feat_l = self.bn_memory(feat_l)
-        feat_r = self.bn_memory(feat_r)
         
         feat_l = self.relu_create_mem(feat_l)
-        feat_r = self.relu_create_mem(feat_r)
         
-        return feat_l, feat_r
-
-    def _create_artificial_memory(self, imgs):
-        """
-        input is a tuple opf left and right image, shape n, 3, 512, 960
-        
-        method:
-            augmet the pari to mimic a previous frame
-            only for training
-            
-        
-        """
-        
-        temporal_aug = transforms.Compose([
-                                    transforms.RandomAffine(degrees=0, translate=(0.015, 0.015)),
-                                    transforms.ColorJitter(brightness=0.05, contrast=0.05),
-                                    transforms.GaussianBlur(kernel_size=3, sigma=(0.1, 0.5)),
-                                    transforms.Lambda(lambda x: x + torch.randn_like(x) * 0.01),  # Gaussian noise
-                                    transforms.Lambda(lambda x: torch.clamp(x, 0.0, 1.0)) 
-                                ])
-        # input tensor shape: (1, 48, 128, 240) normalized
-        img_L_prev = temporal_aug(imgs[0].clone())
-        img_R_prev = temporal_aug(imgs[1].clone())
-        
-        left_f_mem = self.backbone(img_L_prev)
-        right_f_mem = self.backbone(img_R_prev) # shape for outputs: (1, 48, 128, 240)
-        
-        left_f_mem = self.conv2d_memory(left_f_mem)
-        right_f_mem = self.conv2d_memory(right_f_mem)
-        
-        left_f_mem = self.bn_memory(left_f_mem)
-        right_f_mem = self.bn_memory(right_f_mem)
-        
-        left_f_mem = self.relu_create_art_mem(left_f_mem)
-        right_f_mem = self.relu_create_art_mem(right_f_mem)
-        
-        return left_f_mem, right_f_mem
+        return feat_l
     
     def matching_module(self, feature_l, feature_r, base):
         # Adding disparity clues includes:
@@ -168,48 +132,58 @@ class SX3DIMG(nn.Module):
     def _init_3d_head(self):
         self.head = HD.head_box_3d(self.cfg)
         
-    def forward(self, img_left, img_right, temp_memory = None):
+    def forward(self, img_l, img_r, mem_left, calib):
         """
         img_l and img_r: a torch tensor of shape (n, 3, 512, 960)
-        tem_memory: a tuple of tensors of shape 1, 3, 128, 240
+        mem_left and mem_right: tensors of shape 1, 3, 128, 240
 
         """
-        assert temp_memory == None and self.cfg.data.type == 'random'
+        if self.debug:
+            print("==> Beginning of forward")
         
-        print("==> st 1")
-        
-        # data seperation
-        img_l, img_r = img_left['img_tensor'], img_right['img_tensor']
+        self.grid_flat_batch = []
         if self.cfg.camera.P_l is None:
-            assert self.cfg.data.type == 'random'
-            self.P_l = img_left['P']
-            self.grid_img = cam_to_img(self.grid, self.P_l)
-            self.grid_flat = grid_for_sample(self.grid_img, (self.h, self.w)) # 1, N, 1, 2 in VU
+            for i in range(len(img_l)):
+                self.P_l = calib[i].reshape(3, 4)
+                self.grid_img = cam_to_img(self.grid, self.P_l)
+                self.grid_flat = grid_for_sample(self.grid_img, (self.h, self.w)) # 1, N, 1, 2 in VU
+                self.grid_flat_batch.append(self.grid_flat)
+            self.grid_flat_batch = torch.stack(self.grid_flat_batch, dim = 0).to(self.device)
+        else:
+            self.grid_flat_batch = self.grid_flat.repeat(len(img_l), 1, 1, 1).to(self.device)
         
-        print("==> st 2 - before features")
+        if self.debug:
+            print("==> Grid is generated, flattened, and batched")
+            print("==> Feature extraction from current frame statrted")
+            
         # Feature extraction from each image
         left_f = self.backbone(img_l)
         right_f = self.backbone(img_r) # shape for outputs: (1, 48, 128, 240)
 
-        print("==> st 3 - after features")
-        
-        if not temp_memory:
-            temp_memory = self._create_artificial_memory((img_l, img_r))
-        
+        if self.debug:        
+            print("==> Feature extraction done!")
+
         # this is the first model output
-        output_memory = self._create_memory((left_f, right_f))
+        mem_l = self.conv2d_memory(left_f)
+        mem_l = self.bn_memory(mem_l)
+        output_memory = self.relu_create_mem(mem_l)
+        if self.debug:        
+            print("==> output memory is created")
         assert output_memory[0].shape == torch.Size([1, 3, int(self.h/4), int(self.w/4)])
         
         # keeping left features for final concatenation
-        base_feature = torch.cat([left_f, temp_memory[0]], dim = 1)
-        print("==> st 4 - before matching")
+        base_feature = torch.cat([left_f, mem_left], dim = 1)
+        if self.debug:
+            print("==> Stereo matching started")
         # matching stage
         matched_tensor = self.matching_module(left_f, right_f, base_feature)
-        print("==> st 5 - after matching")
         
+        if self.debug:  
+            print("==> Voxelization started")
         voxel = self.voxelizer(matched_tensor)
-        print("==> st 6 - after voxel")
-        # detection head
+        
+        if self.debug:
+            print("==> Detection head started")
         if self.cfg.model.head == 'box2d':
             out = self.head(voxel)
         elif self.cfg.model.head == 'box3d':

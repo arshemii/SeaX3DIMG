@@ -44,7 +44,7 @@ def assign_gt_to_voxels(grid, gtl, ignore_class_id=-1):
                  (ys >= y_min) & (ys <= y_max) & \
                  (zs >= z_min) & (zs <= z_max)
 
-        if cat == ignore_class_id:
+        if int(cat) == ignore_class_id:
             assignments[inside] = -2  # Ignored class (e.g. Tram)
         else:
             assignments[inside] = idx  # Assign voxel to this gt
@@ -109,7 +109,7 @@ class loss_3d(nn.Module):
             else:
                 for (i, j, k, gt_idx) in center_voxels[b]:
                     # No need for one hot, should be [2]
-                    target_cls = torch.tensor([gtl[b][gt_idx]['category']], device=pred_cls_logits.device)
+                    target_cls = gtl[b][gt_idx]['category']
                     pred = pred_cls_logits[b, :, i, j, k].unsqueeze(0)  # [1, C]
                     # Why not softmax? No softmax, raw logits
         
@@ -137,7 +137,7 @@ class loss_3d(nn.Module):
                     pred_offset = pred_offsets[b, :, i, j, k]
                     pred_center = voxel_center + pred_offset
         
-                    gt_center = torch.tensor(gtl[b][gt_idx]['bbox3d'][3:6], device=pred_offsets.device)
+                    gt_center = gtl[b][gt_idx]['bbox3d'][3:6]
                     loss += nn.functional.l1_loss(pred_center, gt_center)
                     count += 1
         return loss / max(count, 1)
@@ -155,7 +155,7 @@ class loss_3d(nn.Module):
             else:
                 for (i, j, k, gt_idx) in center_voxels[b]:
                     pred = pred_dims[b, :, i, j, k]
-                    gt = torch.tensor(gtl[b][gt_idx]['bbox3d'][0:3], device=pred.device)
+                    gt = gtl[b][gt_idx]['bbox3d'][0:3]
                     loss += nn.functional.l1_loss(pred, gt)
                     count += 1
         return loss / max(count, 1)
@@ -172,7 +172,7 @@ class loss_3d(nn.Module):
             else:
                 for (i, j, k, gt_idx) in center_voxels[b]:
                     pred = pred_yaw[b, 0, i, j, k]
-                    gt = torch.tensor(gtl[b][gt_idx]['bbox3d'][6], device=pred.device)
+                    gt = gtl[b][gt_idx]['bbox3d'][6]
                     loss += nn.functional.smooth_l1_loss(pred, gt)
                     count += 1
         return loss / max(count, 1)

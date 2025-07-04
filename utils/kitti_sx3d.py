@@ -6,7 +6,7 @@ Created on Mon Jun 23 18:21:33 2025
 @author: arash
 """
 from torch.utils.data import Dataset
-import data_utils as du
+import utils.data_utils as du
 import cv2
 
 class kitti_sx3d(Dataset):
@@ -17,15 +17,15 @@ class kitti_sx3d(Dataset):
         
         if self.mode == 'train':
             self.data_dir = self.cfg.data.path + 'training/'
-            self.DF = du.parse_id_file(self.data_dir + 'ImageSets/train.txt', self.data_dir)
+            self.DF = du.parse_id_file(self.cfg.data.path + 'train.txt', self.data_dir)
             self._label_parse()
         elif self.mode == 'val':
             self.data_dir = self.cfg.data.path + 'training/'
-            self.DF = du.parse_id_file(self.data_dir + 'ImageSets/val.txt', self.data_dir)
+            self.DF = du.parse_id_file(self.cfg.data.path + 'val.txt', self.data_dir)
             self._label_parse()
         elif self.mode == 'test':
             self.data_dir = self.cfg.data.path + 'testing/'
-            self.DF = du.parse_id_file(self.data_dir + 'ImageSets/test.txt', self.data_dir)
+            self.DF = du.parse_id_file(self.cfg.data.path + 'test.txt', self.data_dir)
         else:
             raise NotImplementedError("Only test and train available!")
         
@@ -75,23 +75,33 @@ class kitti_sx3d(Dataset):
     def __getitem__(self, index):
         instance = self.DF[index]
         
-        self.img_l =  cv2.imread(instance['img_l_path'], 1 | 128 )   
+        self.img_l =  cv2.imread(instance['img_l_path'], 1 | 128 )  
+        self.img_l_previous =  cv2.imread(instance['img_l_path_previous'], 1 | 128 ) 
         self.img_r =  cv2.imread(instance['img_r_path'], 1 | 128 )
+        self.img_r_previous =  cv2.imread(instance['img_r_path_previous'], 1 | 128 )
         
         self.img_l = cv2.cvtColor(self.img_l, cv2.COLOR_BGR2RGB)
+        self.img_l_previous = cv2.cvtColor(self.img_l_previous, cv2.COLOR_BGR2RGB)
         self.img_r = cv2.cvtColor(self.img_r, cv2.COLOR_BGR2RGB)
+        self.img_r_previous = cv2.cvtColor(self.img_r_previous, cv2.COLOR_BGR2RGB)
         
         self.img_l, scale, crop, direction = du.img_resize(self.img_l, self.cfg.model.in_size)
+        self.img_l_previous, _, _, _ = du.img_resize(self.img_l_previous, self.cfg.model.in_size)
         self.img_r, _, _, _ = du.img_resize(self.img_r, self.cfg.model.in_size)
+        self.img_r_previous, _, _, _ = du.img_resize(self.img_r_previous, self.cfg.model.in_size)
         
         self.P_l_converted = du.convert_calibration(instance['calib_params']['P2'], scale, crop, direction)
         
         self.img_l = du.img_normalize(self.img_l, self.cfg.data.mean[0], self.cfg.data.std[0])
+        self.img_l_previous = du.img_normalize(self.img_l_previous, self.cfg.data.mean[0], self.cfg.data.std[0])
         self.img_r = du.img_normalize(self.img_r, self.cfg.data.mean[0], self.cfg.data.std[0])
+        self.img_r_previous = du.img_normalize(self.img_r_previous, self.cfg.data.mean[0], self.cfg.data.std[0])
         
         data = {"left_img": self.img_l,
+                "left_img_previous": self.img_l_previous,
                 "right_img": self.img_r,
-                "calib": self.P_l_converted,
+                "right_img_previous": self.img_r_previous,
+                "calib": self.P_l_converted.view(1, -1),
                 "id": instance["ID"]}
         
         if "labels" in instance.keys():

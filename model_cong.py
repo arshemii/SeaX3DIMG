@@ -8,6 +8,7 @@ Created on Mon Jun  2 19:53:22 2025
 
 from yacs.config import CfgNode as CN
 import numpy as np
+import torch
 
 def config_generator():
     cfg = CN()
@@ -19,12 +20,18 @@ def config_generator():
     cfg.model.head = CN()
     cfg.mode = CN()
     cfg.loss = CN()
+    cfg.eval = CN()
+    
     
     cfg.num_batch = 8
     cfg.num_worker = 4
     
     cfg.log_dir = './logging_dir'
     cfg.logging = False
+    
+    cfg.debug = True
+    
+    cfg.device = [torch.device('cuda' if torch.cuda.is_available() else 'cpu')]
     
     # Model params
     cfg.model.num_class = 4
@@ -48,13 +55,16 @@ def config_generator():
     cfg.model.sx3d.checkpoint = './checkpoints/'
     ####################################
     
-    cfg.data.type = 'random' # other option :'sequential'
-    cfg.data.path = '../dataset/'
+    cfg.data.path = './dataset/sequential/'
     cfg.data.filter = [{
         "trunc": 0.8,
         "occl": [0, 1, 2]}]
     
     cfg.camera.P_l = None
+    # example:
+    # tensor([[5.5771e+02, 0.0000e+00, 4.7116e+02, 3.4672e+01],
+    #        [0.0000e+00, 5.5771e+02, 1.3361e+02, 1.6725e-01],
+    #        [0.0000e+00, 0.0000e+00, 1.0000e+00, 2.7459e-03]], dtype=torch.float64)
     
     cfg.model.sx3d.drop_out = 0.10
     
@@ -128,7 +138,6 @@ def config_generator():
     cfg.loss.alpha = 0.25
     cfg.loss.gamma = 2.0
     
-    cfg.eval_in_training = True  # to evaluate in each epoch
     cfg.num_epochs = 100
 
     cfg.eval.save_dir = './eval_dir/'
