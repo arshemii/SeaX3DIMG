@@ -25,15 +25,15 @@ def load_checkpoint(filename, model, optimizer=None):
 
 class Trainer:
     def __init__(self, cfg, model, dataset, grid, collate_fn, metric_module,
-                 device, optimizer, loss_fn, resume_checkpoint=None):
+                 optimizer, loss_fn, resume_checkpoint=None):
         
         self.cfg = cfg
-        self.model = model.to(device)
+        self.device = self.cfg.device[0]
+        self.model = model.to(self.device)
         self.dataset = dataset
         self.collate_fn = collate_fn
         self.metric_module = metric_module
         self.num_epochs = self.cfg.num_epochs
-        self.device = device
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.grid = grid
@@ -71,8 +71,7 @@ class Trainer:
             
             for key in ["left_img", "left_img_previous", "right_img", "calib"]:
                 if key == "calib":
-                    for calib in batch["calib"]:
-                        calib.to(self.device)
+                    batch["calib"].to(self.device)
                 elif key == "label":
                     for label in batch["label"]:
                         for k in label.keys():

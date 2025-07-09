@@ -29,9 +29,10 @@ def config_generator():
     cfg.log_dir = './logging_dir'
     cfg.logging = False
     
-    cfg.debug = True
+    cfg.debug = False
     
-    cfg.device = [torch.device('cuda' if torch.cuda.is_available() else 'cpu')]
+    cfg.device = ['cpu']
+    #cfg.device = [torch.device('cuda' if torch.cuda.is_available() else 'cpu')]
     
     # Model params
     cfg.model.num_class = 4

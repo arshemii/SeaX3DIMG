@@ -8,6 +8,7 @@ Created on Mon Jun 23 18:28:34 2025
 import numpy as np
 import cv2
 import torch
+import os
 
 def box_generator_2d(detection):
     # order: xmin, ymin, xmax, ymax
@@ -24,24 +25,63 @@ def box_generator_3d(detection):
                     detection[11], detection[12], detection[13],
                     detection[14]])
 
+# def parse_id_file(set_path, data_dir):
+#     result = []
+#     with open(set_path, 'r') as f:
+#         for _, line in enumerate(f):
+#             line = line.strip()
+#             if line:
+#                 result.append({"ID": line})
+                
+#     for ids in result:
+#         instance_str = ids["ID"]
+#         if os.path.exists(data_dir + 'prev_2/' + instance_str + '_02.png'):
+#             ids["img_l_path"] = data_dir + 'prev_2/' + instance_str + '_01.png'
+#             ids["img_l_path_previous"] = data_dir + 'prev_2/' + instance_str + '_02.png'
+#             ids["img_r_path"] = data_dir + 'prev_3/' + instance_str + '_01.png'
+#             ids["img_r_path_previous"] = data_dir + 'prev_3/' + instance_str + '_02.png'
+#             ids["calib_path"] = data_dir + 'calib/' + instance_str + '.txt'
+#             if 'train' in data_dir:
+#                 ids["label_path"] = data_dir + 'label_2/' + instance_str + '.txt'
+#                 if not os.path.exists(ids["label_path"]):
+#                     ids = None
+#         else:
+#             ids = None
+            
+#     final_res = [item for item in result if item is not None]  
+#     return final_res
+
 def parse_id_file(set_path, data_dir):
     result = []
     with open(set_path, 'r') as f:
         for _, line in enumerate(f):
             line = line.strip()
-            if line:
-                result.append({"ID": line})
-                
-    for ids in result:
-        instance_str = ids["ID"]
-        ids["img_l_path"] = data_dir + 'prev_2/' + instance_str + '_01.png'
-        ids["img_l_path_previous"] = data_dir + 'prev_2/' + instance_str + '_02.png'
-        ids["img_r_path"] = data_dir + 'prev_3/' + instance_str + '_01.png'
-        ids["img_r_path_previous"] = data_dir + 'prev_3/' + instance_str + '_02.png'
-        ids["calib_path"] = data_dir + 'calib/' + instance_str + '.txt'
-        if 'train' in data_dir:
-            ids["label_path"] = data_dir + 'label_2/' + instance_str + '.txt'
-        
+            if not line:
+                continue
+
+            instance_str = line
+            label_path = os.path.join(data_dir, 'label_2', instance_str + '.txt')
+            prev2_path = os.path.join(data_dir, 'prev_2', instance_str + '_02.png')
+
+            # Filter: check if necessary files exist
+            if not os.path.exists(prev2_path):
+                continue
+            if 'train' in data_dir and not os.path.exists(label_path):
+                continue
+
+            entry = {
+                "ID": instance_str,
+                "img_l_path": os.path.join(data_dir, 'prev_2', instance_str + '_01.png'),
+                "img_l_path_previous": os.path.join(data_dir, 'prev_2', instance_str + '_02.png'),
+                "img_r_path": os.path.join(data_dir, 'prev_3', instance_str + '_01.png'),
+                "calib_path": os.path.join(data_dir, 'calib', instance_str + '.txt'),
+            }
+
+            if 'train' in data_dir:
+                entry["label_path"] = label_path
+
+            result.append(entry)
+
     return result
 
 def parse_calibration(calib_path):
@@ -185,10 +225,10 @@ def collate_fn(batch):
     calib_left = torch.stack([item['calib'] for item in batch], dim=0)  # a 12-value each row of P
     
     batch_dict = {
-        "left_img": images_l,
-        "left_img_previous": images_l_p,
-        "right_img": images_r,
-        "calib": calib_left
+        "left_img": images_l.to(dtype=torch.float32),
+        "left_img_previous": images_l_p.to(dtype=torch.float32),
+        "right_img": images_r.to(dtype=torch.float32),
+        "calib": calib_left.to(dtype=torch.float32)
     }
 
     if "label" in batch[0]:

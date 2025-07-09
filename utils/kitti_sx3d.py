@@ -18,6 +18,9 @@ class kitti_sx3d(Dataset):
         if self.mode == 'train':
             self.data_dir = self.cfg.data.path + 'training/'
             self.DF = du.parse_id_file(self.cfg.data.path + 'train.txt', self.data_dir)
+            if self.cfg.debug:
+                print(f"==> length of the dataframe is: {len(self.DF)}")
+                print(f"==> Keys are: {self.DF[10].keys()}")
             self._label_parse()
         elif self.mode == 'val':
             self.data_dir = self.cfg.data.path + 'training/'
@@ -40,7 +43,7 @@ class kitti_sx3d(Dataset):
             
     def _label_parse(self):
         for instance in self.DF:
-            instance["labels"] = du.parse_label(instance["label_path"], self.cfg)
+            instance["labels"] = du.parse_label(instance['label_path'], self.cfg)
             
     def statistics(self):
         assert self.mode != 'test'
@@ -78,29 +81,28 @@ class kitti_sx3d(Dataset):
         self.img_l =  cv2.imread(instance['img_l_path'], 1 | 128 )  
         self.img_l_previous =  cv2.imread(instance['img_l_path_previous'], 1 | 128 ) 
         self.img_r =  cv2.imread(instance['img_r_path'], 1 | 128 )
-        self.img_r_previous =  cv2.imread(instance['img_r_path_previous'], 1 | 128 )
+        #self.img_r_previous =  cv2.imread(instance['img_r_path_previous'], 1 | 128 )
         
         self.img_l = cv2.cvtColor(self.img_l, cv2.COLOR_BGR2RGB)
         self.img_l_previous = cv2.cvtColor(self.img_l_previous, cv2.COLOR_BGR2RGB)
         self.img_r = cv2.cvtColor(self.img_r, cv2.COLOR_BGR2RGB)
-        self.img_r_previous = cv2.cvtColor(self.img_r_previous, cv2.COLOR_BGR2RGB)
+        #self.img_r_previous = cv2.cvtColor(self.img_r_previous, cv2.COLOR_BGR2RGB)
         
         self.img_l, scale, crop, direction = du.img_resize(self.img_l, self.cfg.model.in_size)
         self.img_l_previous, _, _, _ = du.img_resize(self.img_l_previous, self.cfg.model.in_size)
         self.img_r, _, _, _ = du.img_resize(self.img_r, self.cfg.model.in_size)
-        self.img_r_previous, _, _, _ = du.img_resize(self.img_r_previous, self.cfg.model.in_size)
+        #self.img_r_previous, _, _, _ = du.img_resize(self.img_r_previous, self.cfg.model.in_size)
         
         self.P_l_converted = du.convert_calibration(instance['calib_params']['P2'], scale, crop, direction)
         
         self.img_l = du.img_normalize(self.img_l, self.cfg.data.mean[0], self.cfg.data.std[0])
         self.img_l_previous = du.img_normalize(self.img_l_previous, self.cfg.data.mean[0], self.cfg.data.std[0])
         self.img_r = du.img_normalize(self.img_r, self.cfg.data.mean[0], self.cfg.data.std[0])
-        self.img_r_previous = du.img_normalize(self.img_r_previous, self.cfg.data.mean[0], self.cfg.data.std[0])
+        #self.img_r_previous = du.img_normalize(self.img_r_previous, self.cfg.data.mean[0], self.cfg.data.std[0])
         
         data = {"left_img": self.img_l,
                 "left_img_previous": self.img_l_previous,
                 "right_img": self.img_r,
-                "right_img_previous": self.img_r_previous,
                 "calib": self.P_l_converted.view(1, -1),
                 "id": instance["ID"]}
         

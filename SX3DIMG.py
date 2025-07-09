@@ -8,7 +8,7 @@ Created on Mon Jun  2 19:53:22 2025
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision import transforms
+#from torchvision import transforms
 from modules.pose_hrnet import get_pose_net
 from modules.matching import Level
 from utils.grid_generator import GridGenerator,cam_to_img, grid_for_sample
@@ -31,7 +31,8 @@ class SX3DIMG(nn.Module):
         self.h, self.w = self.cfg.model.in_size
         
         self.grid_obj = GridGenerator(self.cfg.grid_size, self.cfg.grid_unc) # points in cam coordinates
-        self.grid = self.grid_obj.get_grid()['grid']
+        self.grid = self.grid_obj.get_grid()['grid'].to(dtype=torch.float32)
+        self.grid = self.grid.to(self.device)
         self.grid_resolution = tuple(int(round(size / res)) for size, res in zip(self.cfg.grid_size, self.cfg.grid_unc))
         
         
@@ -72,6 +73,7 @@ class SX3DIMG(nn.Module):
     def feature_net(self):
         if self.cfg.model.back.name == 'hrnet-w48':
             feat_net = get_pose_net(self.cfg, self.is_train_backbone)
+            feat_net.to(self.device)
         else:
             raise NotImplementedError("Must implement resnet with output of shape (1, 48, 128, 128)")
         if self.logs:
@@ -106,7 +108,7 @@ class SX3DIMG(nn.Module):
         base_down = torch.cat([base_down, disp_up], dim = 1) # 128
         base_down = self.bn_match_1(base_down)
         
-        assert base_down.shape == torch.Size([1, 128, int(self.h/8), int(self.w/8)])
+        assert base_down.shape[2] == int(self.h/8)
         
         base_down = self.conv2d_match(base_down)
         base_down = self.bn_match_2(base_down)
@@ -120,9 +122,11 @@ class SX3DIMG(nn.Module):
         
         N_F = tensor.shape[1]
         
-        voxel = F.grid_sample(tensor ,self.grid_flat,
+        grid_flat_rep = self.grid_flat.repeat(tensor.shape[0], 1, 1, 1).to(self.device)
+        
+        voxel = F.grid_sample(tensor, grid_flat_rep,
                             mode='bilinear', align_corners=True)
-        voxel = voxel.reshape(1, N_F, self.grid_resolution[0], self.grid_resolution[1], self.grid_resolution[2])
+        voxel = voxel.reshape(tensor.shape[0], N_F, self.grid_resolution[0], self.grid_resolution[1], self.grid_resolution[2])
         
         return voxel
     
@@ -169,7 +173,7 @@ class SX3DIMG(nn.Module):
         output_memory = self.relu_create_mem(mem_l)
         if self.debug:        
             print("==> output memory is created")
-        assert output_memory[0].shape == torch.Size([1, 3, int(self.h/4), int(self.w/4)])
+        assert output_memory.shape[2] == int(self.h/4)
         
         # keeping left features for final concatenation
         base_feature = torch.cat([left_f, mem_left], dim = 1)
