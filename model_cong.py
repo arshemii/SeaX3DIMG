@@ -23,13 +23,13 @@ def config_generator():
     cfg.eval = CN()
     
     
-    cfg.num_batch = 8
+    cfg.num_batch = 1
     cfg.num_worker = 4
     
     cfg.log_dir = './logging_dir'
     cfg.logging = False
     
-    cfg.debug = False
+    cfg.debug = True
     
     cfg.device = ['cpu']
     #cfg.device = [torch.device('cuda' if torch.cuda.is_available() else 'cpu')]
@@ -79,7 +79,8 @@ def config_generator():
         # y--> -0.64 to +3.86
         # z --> +94
     
-    cfg.grid_size = (20.0, 12.0, 42.0)
+    cfg.grid_size = (50.0, 15.0, 95.0)
+    #cfg.grid_size = (20.0, 12.0, 42.0)
     cfg.grid_unc = (0.2, 0.4, 0.6)
     
     cfg.model.sx3d.is_confidence = True

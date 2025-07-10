@@ -94,7 +94,7 @@ avg_loss = 0.0
 
 dataset = kitti_sx3d(cfg)
 dataloader = DataLoader(dataset, batch_size=1, shuffle=True,
-                              collate_fn=collate_fn, num_workers=2)
+                              collate_fn=collate_fn, num_workers=4)
 
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-2)
 scheduler = CosineAnnealingLR(optimizer, T_max=30, eta_min=1e-6)  # T_max = epochs
@@ -109,14 +109,15 @@ for batch_idx, batch in pbar:
     if batch_idx == 5:
         break
     
-    for key in ["left_img", "left_img_previous", "right_img", "calib"]:
+    for key in ["left_img", "left_img_previous", "right_img", "calib", "label"]:
         if key == "calib":
             batch["calib"] = batch["calib"].to(device)
         elif key == "label":
-            for label in batch["label"]:
-                for k in label.keys():
-                    if k in ["category", "bbox3d", "bbox2d"]:
-                        label[k] = label[k].to(device)
+            for sample in batch["label"]:
+                for label in sample:
+                    for k in label.keys():
+                        if k in ["category", "bbox3d", "bbox2d"]:
+                            label[k] = label[k].to(device)
         else:
             batch[key] = batch[key].to(device)
     

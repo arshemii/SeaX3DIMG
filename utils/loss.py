@@ -9,12 +9,12 @@ import torch.nn as nn
 import torch
 import numpy as np
 
-def assign_gt_to_voxels(grid, gtl, ignore_class_id=-1):
+def assign_gt_to_voxels(grid, gtl, debug, ignore_class_id=-1):
     """
     Assigns ground truth objects to the 3D grid.
 
     Args:
-        grid: Tensor of shape [3, W, H, D] representing voxel centers (x, y, z)
+        grid: Tensor of shape [W, H, D, 3] representing voxel centers (x, y, z)
         gtl: List of dicts, each with:
             - 'category': class ID or -1 for ignored objects
             - 'bbox3d': (h, w, l, cx, cy, cz, yaw)
@@ -24,39 +24,44 @@ def assign_gt_to_voxels(grid, gtl, ignore_class_id=-1):
                 - >= 0: index of gtl object
                 - -2: ignored (like tram)
     """
-    W, H, D = grid.shape[1], grid.shape[2], grid.shape[3]
+    W, H, D = grid.shape[0], grid.shape[1], grid.shape[2]
     device = grid.device
     
     assignments = torch.full((W, H, D), fill_value=-1, dtype=torch.long, device=device)
     center_voxels = []
-
-    for idx, gt in enumerate(gtl):
-        cat = gt["category"]
-        h, w, l, cx, cy, cz, yaw = gt["bbox3d"]
-
-        # Compute voxel indices inside the box (simplified AABB logic)
-        x_min, x_max = cx - w/2, cx + w/2
-        y_min, y_max = cy - h/2, cy + h/2
-        z_min, z_max = cz - l/2, cz + l/2
-
-        xs, ys, zs = grid[0], grid[1], grid[2]
-        inside = (xs >= x_min) & (xs <= x_max) & \
-                 (ys >= y_min) & (ys <= y_max) & \
-                 (zs >= z_min) & (zs <= z_max)
-
-        if int(cat) == ignore_class_id:
-            assignments[inside] = -2  # Ignored class (e.g. Tram)
-        else:
-            assignments[inside] = idx  # Assign voxel to this gt
-            
-        # Find the voxel closest to GT center
-        voxel_xyz = grid[:, inside].T  # [N, 3]
-        gt_center = torch.tensor([cx, cy, cz], device=grid.device)
-        dists = torch.norm(voxel_xyz - gt_center, dim=1)
-        min_idx = torch.argmin(dists)
-        idx_flat = torch.nonzero(inside, as_tuple=False)[min_idx]
-        i, j, k = idx_flat.tolist()
-        center_voxels.append((i, j, k, idx))  # voxel_i, voxel_j, voxel_k, gt_idx
+    
+    if len(gtl) != 0:
+        for idx, gt in enumerate(gtl):
+            cat = gt["category"]
+            h, w, l, cx, cy, cz, yaw = gt["bbox3d"]
+    
+            # Compute voxel indices inside the box (simplified AABB logic)
+            x_min, x_max = cx - w/2, cx + w/2
+            y_min, y_max = cy - h/2, cy + h/2
+            z_min, z_max = cz - l/2, cz + l/2
+    
+            xs, ys, zs = grid[:,:,:,0], grid[:,:,:,1], grid[:,:,:,2]
+            inside = (xs >= x_min) & (xs <= x_max) & \
+                     (ys >= y_min) & (ys <= y_max) & \
+                     (zs >= z_min) & (zs <= z_max)
+    
+            if int(cat) == ignore_class_id:
+                assignments[inside] = -2  # Ignored class (e.g. Tram)
+            else:
+                assignments[inside] = idx  # Assign voxel to this gt
+                
+            # Find the voxel closest to GT center
+            voxel_xyz = grid[inside]  # [N, 3]
+            gt_center = torch.tensor([cx, cy, cz], device=grid.device)
+            dists = torch.norm(voxel_xyz - gt_center, dim=1)
+            if debug:
+                print(f"==> shape of the voxel is {voxel_xyz.shape}")
+                print(f"==> shape of the centers is {gt_center.shape}")
+                print(f"==> length of the distances is {len(dists)}")
+            min_idx = torch.argmin(dists)
+            idx_flat = torch.nonzero(inside, as_tuple=False)[min_idx]
+            i, j, k = idx_flat.tolist()
+            center_voxels.append((i, j, k, idx))  # voxel_i, voxel_j, voxel_k, gt_idx
 
     return assignments, center_voxels
 
@@ -73,6 +78,7 @@ class loss_3d(nn.Module):
         self.alpha = self.cfg.loss.alpha
         self.gamma = self.cfg.loss.gamma
         self.loss = {}
+        self.debug = self.cfg.debug
         
         
     def object_conf_loss(self, pred_obj_logits, voxel_assignments):
@@ -123,7 +129,7 @@ class loss_3d(nn.Module):
     def center_loss(self, pred_offsets, center_voxels, gtl, grid):
         """
         pred_offsets: [B, 3, W, H, D]
-        grid: [3, W, H, D]
+        grid: [W, H, D, 3]
         """
         
         loss = 0.0
@@ -133,7 +139,7 @@ class loss_3d(nn.Module):
                 continue
             else:
                 for (i, j, k, gt_idx) in center_voxels[b]:
-                    voxel_center = grid[:, i, j, k]
+                    voxel_center = grid[i, j, k, :]
                     pred_offset = pred_offsets[b, :, i, j, k]
                     pred_center = voxel_center + pred_offset
         
@@ -203,7 +209,7 @@ class loss_3d(nn.Module):
         assignments = []
         c_voxels = []
         for i in range(self.B):
-            ass, center_voxels = assign_gt_to_voxels(grid, gtl[i])  # shape of ass: (res_w, res_h, res_d)
+            ass, center_voxels = assign_gt_to_voxels(grid, gtl[i], self.debug)  # shape of ass: (res_w, res_h, res_d)
             assignments.append(ass)
             c_voxels.append(center_voxels)
                 
