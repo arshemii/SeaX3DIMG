@@ -5,6 +5,10 @@ This script handle everything for training process
 
 Notes:
     1. change the dataset module to have previous step images
+    2. use mixed precision training if GPU is needed
+       mixed precision only does computation of forward and backward in f16
+    3. number of workers either 2 or 4
+    4. Shall use a profiling tool
 
 """
 #import sys
