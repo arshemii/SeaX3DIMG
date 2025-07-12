@@ -52,6 +52,7 @@ def assign_gt_to_voxels(grid, gtl, debug, ignore_class_id=-1):
                 
             # Find the voxel closest to GT center
             voxel_xyz = grid[inside]  # [N, 3]
+            assert len(voxel_xyz) != 0 and len(gtl) != 0
             gt_center = torch.tensor([cx, cy, cz], device=grid.device)
             dists = torch.norm(voxel_xyz - gt_center, dim=1)
             if debug:
@@ -212,6 +213,7 @@ class loss_3d(nn.Module):
         
         # first part: a function to match each gt detection to corresponding voxels and find which voxel is closest to the box center
         assert grid.shape[-1] == 3
+        self.B = len(prediction)
         #print(f"==> output of the mode is in: {prediction.device}")
         
         assignments = []
@@ -222,8 +224,7 @@ class loss_3d(nn.Module):
             c_voxels.append(center_voxels)
                 
         assert len(c_voxels) == len(gtl) and \
-                len(gtl) == self.B and \
-                len(prediction) == self.B
+                len(gtl) == self.B
         
         # Second part: objectness loss
         self.loss['obj_conf'] = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments)

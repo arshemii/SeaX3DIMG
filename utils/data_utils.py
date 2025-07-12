@@ -233,6 +233,11 @@ def collate_fn(batch):
 
     if "label" in batch[0].keys():
         labels = [item["label"] for item in batch]
+        for sm in labels:
+            for obj in sm:
+                obj['bbox2d'] = obj['bbox2d'].to(dtype=torch.float32)
+                obj['bbox3d'] = obj['bbox3d'].to(dtype=torch.float32)
+                obj['category'] = obj['category'].to(dtype=torch.int64)
         batch_dict['label'] = labels
     return batch_dict
         
