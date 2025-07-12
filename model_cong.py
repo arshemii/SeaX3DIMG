@@ -30,7 +30,7 @@ def config_generator():
     cfg.dev.weight_decay = 1e-2
     cfg.dev.eval_in_train = False
     
-    cfg.num_batch = 2
+    cfg.num_batch = 1
     cfg.num_worker = 4
     
     cfg.log_dir = './logging_dir'

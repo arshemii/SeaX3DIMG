@@ -13,7 +13,7 @@ from tqdm import tqdm
 import json
 import os
 
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 scaler = GradScaler()
 
 def save_checkpoint(state, filename):
