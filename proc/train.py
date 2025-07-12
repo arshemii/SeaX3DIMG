@@ -13,6 +13,9 @@ from tqdm import tqdm
 import json
 import os
 
+from torch.cuda.amp import autocast, GradScaler
+scaler = GradScaler()
+
 def save_checkpoint(state, filename):
     torch.save(state, filename)
     
@@ -25,7 +28,7 @@ def load_checkpoint(filename, model, optimizer=None):
 
 class Trainer:
     def __init__(self, cfg, model, dataset, grid, collate_fn, metric_module,
-                 optimizer, loss_fn, resume_checkpoint=None):
+                 optimizer, scheduler, loss_fn, resume_checkpoint=None):
         
         self.cfg = cfg
         self.device = self.cfg.device[0]
@@ -37,6 +40,7 @@ class Trainer:
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.grid = grid
+        self.scheduler = scheduler
         assert self.grid.shape[-1] == 0
 
         self.batch_size = self.cfg.num_batch
@@ -71,33 +75,38 @@ class Trainer:
             
             for key in ["left_img", "left_img_previous", "right_img", "calib"]:
                 if key == "calib":
-                    batch["calib"].to(self.device)
+                    batch["calib"] = batch["calib"].to(self.device)
                 elif key == "label":
-                    for label in batch["label"]:
-                        for k in label.keys():
-                            if k in ["category", "bbox3d", "bbox2d"]:
-                                label[k].to(self.device)
+                    for sample in batch["label"]:
+                        for label in sample:
+                            for k in label.keys():
+                                if k in ["category", "bbox3d", "bbox2d"]:
+                                    label[k] = label[k].to(self.device)
                 else:
-                    batch[key].to(self.device)
+                    batch[key] = batch[key].to(self.device)
             
             self.optimizer.zero_grad()
             
             #create temporal memory for both left and right image from t - dt
-            temporal_l = self.model.create_memory(batch["left_img_previous"])
-            outputs = self.model(batch["left_img"], batch["right_img"], temporal_l, batch["calib"])[0]
-            if self.eval_in_training:
-                if epoch % 4 == 0:
-                    eval_pair.append([outputs, batch["label"]])
+            with autocast():
+                temporal_l = self.model.create_memory(batch["left_img_previous"])
+                outputs = self.model(batch["left_img"], batch["right_img"], temporal_l, batch["calib"])[0]
+                if self.eval_in_training:
+                    if epoch % 4 == 0:
+                        eval_pair.append([outputs, batch["label"]])
             
-            loss = self.loss_fn(outputs, batch["label"], self.grid)
-            loss['total'].backward()
-            self.optimizer.step()
+                loss = self.loss_fn(outputs, batch["label"], self.grid)
+                
+            scaler.scale(loss['total']).backward()
+            scaler.step(self.optimizer)
+            scaler.update()
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
             
             pbar.set_postfix({'loss': f"{avg_loss:.2f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
-        
+            
+        self.scheduler.step()
         
         if self.metric_module:
             if epoch % 4 == 0:

@@ -18,18 +18,25 @@ def config_generator():
     cfg.model.back = CN()
     cfg.model.sx3d = CN()
     cfg.model.head = CN()
-    cfg.mode = CN()
+    cfg.dev = CN()
     cfg.loss = CN()
     cfg.eval = CN()
     
+    cfg.dev.num_epoch = 10
+    cfg.dev.t_max = cfg.dev.num_epoch // 2
+    cfg.dev.eta_min = 1e-6
+    cfg.dev.mode = None
+    cfg.dev.lr = 1e-4
+    cfg.dev.weight_decay = 1e-2
+    cfg.dev.eval_in_train = False
     
-    cfg.num_batch = 1
+    cfg.num_batch = 2
     cfg.num_worker = 4
     
     cfg.log_dir = './logging_dir'
     cfg.logging = False
     
-    cfg.debug = True
+    cfg.debug = False
     
     #cfg.device = ['cpu']
     cfg.device = [torch.device('cuda' if torch.cuda.is_available() else 'cpu')]
