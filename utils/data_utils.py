@@ -231,10 +231,9 @@ def collate_fn(batch):
         "calib": calib_left.to(dtype=torch.float32)
     }
 
-    if "label" in batch[0]:
-        labels = [item["label"] for item in batch]  # Depends on shape — stack if possible
-        batch_dict["label"] = labels
-    
+    if "label" in batch[0].keys():
+        labels = [item["label"] for item in batch]
+        batch_dict['label'] = labels
     return batch_dict
         
     

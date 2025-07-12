@@ -86,9 +86,9 @@ def config_generator():
         # y--> -0.64 to +3.86
         # z --> +94
     
-    cfg.grid_size = (50.0, 15.0, 95.0)
+    cfg.grid_size = (82.0, 15.0, 94.5)
     #cfg.grid_size = (20.0, 12.0, 42.0)
-    cfg.grid_unc = (0.2, 0.4, 0.6)
+    cfg.grid_unc = (0.82, 0.5, 1.35)
     
     cfg.model.sx3d.is_confidence = True
     

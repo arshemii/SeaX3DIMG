@@ -122,7 +122,9 @@ class loss_3d(nn.Module):
                     
                     pred = pred_cls_logits[b, :, i, j, k].unsqueeze(0)  # [1, C]
                     # Why not softmax? No softmax, raw logits
-        
+                    target_cls = target_cls.to(pred.device)
+                    assert pred.device == target_cls.device
+                    
                     ce = nn.functional.cross_entropy(pred, target_cls, reduction='none')
                     pt = torch.exp(-ce)
                     focal_loss = self.alpha * (1 - pt) ** self.gamma * ce
@@ -210,6 +212,8 @@ class loss_3d(nn.Module):
         
         # first part: a function to match each gt detection to corresponding voxels and find which voxel is closest to the box center
         assert grid.shape[-1] == 3
+        #print(f"==> output of the mode is in: {prediction.device}")
+        
         assignments = []
         c_voxels = []
         for i in range(self.B):

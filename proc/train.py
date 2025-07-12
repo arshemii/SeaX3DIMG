@@ -41,7 +41,7 @@ class Trainer:
         self.loss_fn = loss_fn
         self.grid = grid
         self.scheduler = scheduler
-        assert self.grid.shape[-1] == 0
+        assert self.grid.shape[-1] == 3
 
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
@@ -73,28 +73,29 @@ class Trainer:
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         for batch_idx, batch in pbar:
             
-            for key in ["left_img", "left_img_previous", "right_img", "calib"]:
-                if key == "calib":
-                    batch["calib"] = batch["calib"].to(self.device)
-                elif key == "label":
-                    for sample in batch["label"]:
-                        for label in sample:
-                            for k in label.keys():
-                                if k in ["category", "bbox3d", "bbox2d"]:
-                                    label[k] = label[k].to(self.device)
-                else:
-                    batch[key] = batch[key].to(self.device)
+            batch["calib"] = batch["calib"].to(self.device)
+            batch["left_img"] = batch["left_img"].to(self.device)
+            batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
+            batch["right_img"] = batch["right_img"].to(self.device)
+
+            for sample in batch["label"]:
+                for label in sample:
+                    label['category'] = label['category'].to(self.device)
+                    label['bbox2d'] = label['bbox2d'].to(self.device)
+                    label['bbox3d'] = label['bbox3d'].to(self.device)
+
             
             self.optimizer.zero_grad()
             
             #create temporal memory for both left and right image from t - dt
-            with autocast():
+            with autocast(device_type='cuda'):
                 temporal_l = self.model.create_memory(batch["left_img_previous"])
                 outputs = self.model(batch["left_img"], batch["right_img"], temporal_l, batch["calib"])[0]
-                if self.eval_in_training:
+                if self.metric_module:
                     if epoch % 4 == 0:
                         eval_pair.append([outputs, batch["label"]])
-            
+                
+                assert "label" in batch.keys()
                 loss = self.loss_fn(outputs, batch["label"], self.grid)
                 
             scaler.scale(loss['total']).backward()
