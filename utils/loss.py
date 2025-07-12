@@ -116,6 +116,10 @@ class loss_3d(nn.Module):
                 for (i, j, k, gt_idx) in center_voxels[b]:
                     # No need for one hot, should be [2]
                     target_cls = gtl[b][gt_idx]['category']
+                    
+                    if target_cls == -1:
+                        continue
+                    
                     pred = pred_cls_logits[b, :, i, j, k].unsqueeze(0)  # [1, C]
                     # Why not softmax? No softmax, raw logits
         

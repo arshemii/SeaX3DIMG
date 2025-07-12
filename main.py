@@ -67,10 +67,15 @@ Notes:
 
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 from tqdm import tqdm
 import os
 import torch
+
+from torch.cuda.amp import autocast, GradScaler
+scaler = GradScaler()
+
 from torch.utils.data import DataLoader
 from utils.data_utils import collate_fn
 from utils.kitti_sx3d import kitti_sx3d
@@ -115,6 +120,7 @@ for batch_idx, batch in pbar:
         elif key == "label":
             for sample in batch["label"]:
                 for label in sample:
+                    # print("category:", label["category"].item())
                     for k in label.keys():
                         if k in ["category", "bbox3d", "bbox2d"]:
                             label[k] = label[k].to(device)
@@ -124,12 +130,14 @@ for batch_idx, batch in pbar:
     optimizer.zero_grad()
     
     #create temporal memory for both left and right image from t - dt
-    temporal_l = model.create_memory(batch["left_img_previous"])
-    outputs = model(batch["left_img"], batch["right_img"], temporal_l, batch["calib"])[0]
-    
-    loss = loss_fn(outputs, batch["label"], grid)
-    loss['total'].backward()
-    optimizer.step()
+    with autocast():
+        temporal_l = model.create_memory(batch["left_img_previous"])
+        outputs = model(batch["left_img"], batch["right_img"], temporal_l, batch["calib"])[0]
+        loss = loss_fn(outputs, batch["label"], grid)
+        
+    scaler.scale(loss['total']).backward()
+    scaler.step(optimizer)
+    scaler.update()
     
     running_loss += loss['total'].item()
     avg_loss = running_loss / (batch_idx + 1)

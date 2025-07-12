@@ -13,36 +13,40 @@ class head_box_3d(nn.Module):
     def __init__(self, cfg):
         super(head_box_3d, self).__init__()
         self.cfg = cfg
+        self.debug = self.cfg.debug
         self.is_conf = self.cfg.model.sx3d.is_confidence
         self.out_ch = self.cfg.model.num_class + 7 + 1 # with confidence score
             
-        self.branch1 = nn.Sequential(nn.Conv3d(256, 128, kernel_size=3, padding=1),
-                                        nn.BatchNorm3d(128),
+        self.branch1 = nn.Sequential(nn.Conv3d(256, 64, kernel_size=3, padding=1),
+                                        nn.BatchNorm3d(64),
                                         nn.ReLU(),
-                                        nn.Dropout3d(p=self.cfg.model.sx3d.drop_out),
-                                        nn.Conv3d(128, 128, kernel_size=3, padding=1),
-                                        nn.BatchNorm3d(128),
-                                        nn.ReLU())
+                                        nn.Dropout3d(p=self.cfg.model.sx3d.drop_out))
         
-        self.branch2 = nn.Sequential(nn.Conv3d(256, 128, kernel_size=5, padding=2),
-                                        nn.BatchNorm3d(128),
+        self.branch2 = nn.Sequential(nn.Conv3d(256, 64, kernel_size=5, padding=2),
+                                        nn.BatchNorm3d(64),
                                         nn.ReLU(),
-                                        nn.Dropout3d(p=self.cfg.model.sx3d.drop_out),
-                                        nn.Conv3d(128, 128, kernel_size=5, padding=2),
-                                        nn.BatchNorm3d(128),
-                                        nn.ReLU())
+                                        nn.Dropout3d(p=self.cfg.model.sx3d.drop_out))
         
-        self.head = nn.Sequential(nn.Conv3d(256, 64, kernel_size=3, padding=1),
+        self.head = nn.Sequential(nn.Conv3d(128, 64, kernel_size=3, padding=1),
                                   nn.BatchNorm3d(64),
                                   nn.ReLU(),
                                   nn.Conv3d(64, self.out_ch, kernel_size=3, padding=1))
         
     def forward(self, x):
+        if self.debug:
+            print("==> Head: branch 1")
         x1 = self.branch1(x)
+        
+        if self.debug:
+            print("==> Head: branch 2")
         x2 = self.branch2(x)
         
+        if self.debug:
+            print("==> Head: concat")
         x = torch.cat([x1, x2], dim=1)
         
+        if self.debug:
+            print("==> Head: final head module!!!")
         out = self.head(x)
         # Output shape: (1, out_ch, 30, 100, 70)
         return out
