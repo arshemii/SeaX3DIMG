@@ -195,8 +195,10 @@ def convert_calibration(P, scale, crop, direction):
     P[0, 2] *= scale  # cx
     P[1, 1] *= scale  # fy
     P[1, 2] *= scale  # cy
-    P[0, 3] *= scale
-    P[1, 3] *= scale
+    
+    P[0, 3] = (P[0, 3] / 1000.0) * scale  # tx in meters
+    P[1, 3] = (P[1, 3] / 1000.0) * scale  # ty in meters
+    P[2, 3] = P[2, 3] / 1000.0            # tz in meters (only divide, no image scale)
     
     if direction == 'h':
         # Account for vertical crop from top

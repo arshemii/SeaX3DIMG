@@ -90,23 +90,26 @@ class loss_3d(nn.Module):
         self.voxel_size = self.cfg.grid_unc
         
         
-    def object_conf_loss(self, pred_obj_logits, voxel_assignments):
+    def object_conf_loss(self, pred_obj_logits, voxel_assignments, gtl):
         """
         pred_obj_logits: [B, 1, W, H, D]
         voxel_assignments: a list of tensors with lenght = B and -1=bg, -2=ignored, >=0=object
         """
         loss = 0.0
         for b in range(self.B):
-            target = (voxel_assignments[b] >= 0).float()
-            valid = (voxel_assignments[b] != -2)
-            pred = pred_obj_logits[b, 0][valid]
-            tgt = target[valid]
-    
-            # Focal BCE
-            bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
-            pt = torch.exp(-bce)
-            focal_loss = self.alpha * (1 - pt) ** self.gamma * bce
-            loss += focal_loss.mean()
+            if len(gtl[b]) == 0:
+                continue
+            else:
+                target = (voxel_assignments[b] >= 0).float()
+                valid = (voxel_assignments[b] != -2)
+                pred = pred_obj_logits[b, 0][valid]
+                tgt = target[valid]
+        
+                # Focal BCE
+                bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
+                pt = torch.exp(-bce)
+                focal_loss = self.alpha * (1 - pt) ** self.gamma * bce
+                loss += focal_loss.mean()
         return loss / self.B
     
     def classification_loss(self, pred_cls_logits, center_voxels, gtl):
@@ -197,8 +200,33 @@ class loss_3d(nn.Module):
                     loss += nn.functional.smooth_l1_loss(pred, gt)
                     count += 1
         return loss / max(count, 1)
+    
+    def _drop_dets(self, assignments, init_c_voxels, init_gtl, oob_mask_valid):
 
-    def forward(self, prediction, gtl, grid):
+        gtl = []
+        c_voxels = []
+        
+        for bn in range(len(assignments)):
+            if len(init_gtl[bn]) == 0:
+                continue
+            else:
+                gtl_sample = []
+                c_voxels_sample = []
+                
+                for centers in init_c_voxels[bn]:
+                    i, j, k, gt_idx = centers
+                    if oob_mask_valid[i, j, k] == True:
+                        c_voxels_sample.append((i, j, k, gt_idx))
+                        gtl_sample.append(init_gtl[bn][gt_idx])
+                    else:
+                        assignments[bn][assignments[bn] == gt_idx] = -1
+                        
+            gtl.append(gtl_sample)
+            c_voxels.append(c_voxels_sample)
+                        
+        return assignments, c_voxels, gtl
+
+    def forward(self, prediction, init_gtl, grid, oob_mask_valid):
         """
         prediction is:
             pred[:num_class] = class probabilities,
@@ -214,6 +242,9 @@ class loss_3d(nn.Module):
         grid is:
             the grid with x, y, z of each voxel to match prediction with gt objects
             
+        oob_mask_valid is:
+            shape 100, 30, 70 and where the voxel is out of boundary of image --> False otherwise, True
+            
         *** Prediction comes like [n, out_ch, w_res, h_res, d_res]
         """
         # TODO: what happens when no detection is there?
@@ -225,17 +256,22 @@ class loss_3d(nn.Module):
         #print(f"==> output of the mode is in: {prediction.device}")
         
         assignments = []
-        c_voxels = []
+        init_c_voxels = []
         for i in range(self.B):
-            ass, center_voxels = assign_gt_to_voxels(grid, gtl[i], self.voxel_size, self.debug)  # shape of ass: (res_w, res_h, res_d)
+            ass, center_voxels = assign_gt_to_voxels(grid, init_gtl[i], self.voxel_size, self.debug)  # shape of ass: (res_w, res_h, res_d)
             assignments.append(ass)
-            c_voxels.append(center_voxels)
-                
-        assert len(c_voxels) == len(gtl) and \
-                len(gtl) == self.B
+            init_c_voxels.append(center_voxels)
+
+        
+        # Intermdiate step: refine detections (drop out)
+        assignments, c_voxels, gtl = self._drop_dets(assignments,
+                                                     init_c_voxels,
+                                                     init_gtl,
+                                                     oob_mask_valid)
+        
         
         # Second part: objectness loss
-        self.loss['obj_conf'] = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments)
+        self.loss['obj_conf'] = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments, gtl)
         
         # Third part: class loss (might be useful if focal loss is used)
         self.loss['cls_loss'] = self.classification_loss(prediction[:, 0:self.num_c], c_voxels, gtl)

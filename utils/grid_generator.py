@@ -136,3 +136,18 @@ def grid_for_sample(pixel_coords, img_shape):
     norm_grid = norm_grid.reshape(1, W*H*D, 1, 2)
     # 1, N, 1, 2 in VU
     return norm_grid
+
+
+def oob_voxels(pixel_coords, img_size):
+    # to find voxels out of the image box
+    # grid_cam.shape is (2, res_w, res_h, res_d)
+    
+    H, W = img_size
+    
+    v = pixel_coords[0]
+    u = pixel_coords[1]
+    
+    # Compute out-of-bounds mask
+    out_of_bounds_mask = (u < 0) | (u >= W) | (v < 0) | (v >= H)
+    
+    return out_of_bounds_mask

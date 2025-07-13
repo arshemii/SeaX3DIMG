@@ -90,13 +90,17 @@ class Trainer:
             #create temporal memory for both left and right image from t - dt
             with autocast(device_type='cuda'):
                 temporal_l = self.model.create_memory(batch["left_img_previous"])
-                outputs = self.model(batch["left_img"], batch["right_img"], temporal_l, batch["calib"])[0]
+                full_output = self.model(batch["left_img"], batch["right_img"], temporal_l, batch["calib"])
+                
+                outputs = full_output[0]  # main prediction
+                oob_mask_valid = full_output[3]
+                
                 if self.metric_module:
                     if epoch % 4 == 0:
-                        eval_pair.append([outputs, batch["label"]])
+                        eval_pair.append([outputs, oob_mask_valid, batch["label"]])
                 
                 assert "label" in batch.keys()
-                loss = self.loss_fn(outputs, batch["label"], self.grid)
+                loss = self.loss_fn(outputs, batch["label"], self.grid, oob_mask_valid)
                 
             scaler.scale(loss['total']).backward()
             scaler.step(self.optimizer)
@@ -105,7 +109,7 @@ class Trainer:
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
             
-            pbar.set_postfix({'loss': f"{avg_loss:.2f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
+            pbar.set_postfix({'loss': f"{running_loss}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
             
         self.scheduler.step()
         

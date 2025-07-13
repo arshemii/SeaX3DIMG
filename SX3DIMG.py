@@ -11,7 +11,7 @@ import torch.nn.functional as F
 #from torchvision import transforms
 from modules.pose_hrnet import get_pose_net
 from modules.matching import Level
-from utils.grid_generator import GridGenerator,cam_to_img, grid_for_sample
+from utils.grid_generator import GridGenerator,cam_to_img, grid_for_sample, oob_voxels
 from modules import heads as HD
 from utils.debug_util import setup_logger
 
@@ -37,9 +37,14 @@ class SX3DIMG(nn.Module):
         
         
         if self.cfg.camera.P_l is not None:
-            self.P_l = cfg.camera.P_l
+            self.P_l = cfg.camera.P_l[0].to(self.device)
             self.grid_img = cam_to_img(self.grid, self.P_l)
+            self.oob_mask = oob_voxels(self.grid_img, self.cfg.model.in_size).to(self.device)
+            self.oob_mask_valid = ~self.oob_mask
+            self.oob_mask_flat = self.oob_mask_valid.view(-1)
             self.grid_flat = grid_for_sample(self.grid_img, (self.h, self.w))
+            self.grid_flat_filtered = self.grid_flat[0][self.oob_mask_flat]
+            self.grid_flat_filtered = self.grid_flat_filtered.unsqueeze(0).to(self.device)
         
         self.backbone = self.feature_net()
         
@@ -116,19 +121,36 @@ class SX3DIMG(nn.Module):
         
         return base_down
     
+    def _voxel_filler(self, voxel):
+        # recunstruct 3d feature map
+        # voxel of shape torch.Size([1, 256, num_valid_points, 1])
+        # Prepare empty tensor
+        full_voxel = torch.zeros((1, 256, 100 * 30 * 70), dtype=voxel.dtype, device=voxel.device)
+        
+        # Remove batch and last dim → shape: [256, num_valid_points]
+        voxel_squeezed = voxel.squeeze(0).squeeze(-1)
+        
+        # Insert into valid positions
+        valid_indices = self.oob_mask_flat.nonzero(as_tuple=False).squeeze(1)  # shape: [valid_voxels]
+        full_voxel[0, :, valid_indices] = voxel_squeezed  # full_voxel: [1, 256, total_voxels]
+        
+        return full_voxel
+    
     def voxelizer(self, tensor):
         # sample features in 2d image points
-        # grid is in 1, n_elevation, n_w*n_d, 2 in VU. So:
+        # grid is in 1, n_h*n_w*n_d, 1, 2 in VU. So:
         
         N_F = tensor.shape[1]
-        
-        grid_flat_rep = self.grid_flat.repeat(tensor.shape[0], 1, 1, 1).to(self.device)
-        
-        voxel = F.grid_sample(tensor, grid_flat_rep,
+                
+        voxel = F.grid_sample(tensor, self.grid_flat_batch,
                             mode='bilinear', align_corners=True)
-        voxel = voxel.reshape(tensor.shape[0], N_F, self.grid_resolution[0], self.grid_resolution[1], self.grid_resolution[2])
         
-        return voxel
+        full_voxel = self._voxel_filler(voxel)
+        
+        full_voxel = full_voxel.reshape(tensor.shape[0], N_F,
+                                        self.grid_resolution[0], self.grid_resolution[1], self.grid_resolution[2])
+        
+        return full_voxel
     
     def _init_2d_head(self):
         self.head = HD.head_box_2d_bev(self.cfg)
@@ -145,16 +167,11 @@ class SX3DIMG(nn.Module):
         if self.debug:
             print("==> Beginning of forward")
         
-        self.grid_flat_batch = []
+
         if self.cfg.camera.P_l is None:
-            for i in range(len(img_l)):
-                self.P_l = calib[i].reshape(3, 4)
-                self.grid_img = cam_to_img(self.grid, self.P_l)
-                self.grid_flat = grid_for_sample(self.grid_img, (self.h, self.w)) # 1, N, 1, 2 in VU
-                self.grid_flat_batch.append(self.grid_flat)
-            self.grid_flat_batch = torch.stack(self.grid_flat_batch, dim = 0).to(self.device)
+            raise NotImplementedError("Must a valid P provided!")
         else:
-            self.grid_flat_batch = self.grid_flat.repeat(len(img_l), 1, 1, 1).to(self.device)
+            self.grid_flat_batch = self.grid_flat_filtered.repeat(len(img_l), 1, 1, 1).to(self.device)
         
         if self.debug:
             print("==> Grid is generated, flattened, and batched")
@@ -194,8 +211,8 @@ class SX3DIMG(nn.Module):
             out = self.head(voxel)
         else:
             raise NotImplementedError("other representation ehad methods!")
-            
-        return out, output_memory, self.grid
+        # TODO: to remove extra outputs
+        return out, output_memory, self.grid, self.oob_mask_valid
     
     def init_weights(self):
         raise NotImplementedError("not yet implemented")

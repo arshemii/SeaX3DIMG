@@ -99,7 +99,6 @@ class kitti_sx3d(Dataset):
         self.img_l_previous = du.img_normalize(self.img_l_previous, self.cfg.data.mean[0], self.cfg.data.std[0])
         self.img_r = du.img_normalize(self.img_r, self.cfg.data.mean[0], self.cfg.data.std[0])
         #self.img_r_previous = du.img_normalize(self.img_r_previous, self.cfg.data.mean[0], self.cfg.data.std[0])
-        
         data = {"left_img": self.img_l,
                 "left_img_previous": self.img_l_previous,
                 "right_img": self.img_r,
