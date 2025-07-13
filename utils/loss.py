@@ -8,8 +8,9 @@ Created on Thu Jun 26 21:14:47 2025
 import torch.nn as nn
 import torch
 import numpy as np
+    
 
-def assign_gt_to_voxels(grid, gtl, debug, ignore_class_id=-1):
+def assign_gt_to_voxels(grid, gtl, voxel_size, debug, ignore_class_id=-1):
     """
     Assigns ground truth objects to the 3D grid.
 
@@ -29,12 +30,18 @@ def assign_gt_to_voxels(grid, gtl, debug, ignore_class_id=-1):
     
     assignments = torch.full((W, H, D), fill_value=-1, dtype=torch.long, device=device)
     center_voxels = []
+    voxel_size = [unc for unc in voxel_size]
     
     if len(gtl) != 0:
         for idx, gt in enumerate(gtl):
             cat = gt["category"]
             h, w, l, cx, cy, cz, yaw = gt["bbox3d"]
-    
+            
+            #zero correction for inside
+            w = max(w, voxel_size[0])
+            h = max(h, voxel_size[1])
+            l = max(l, voxel_size[2])
+                    
             # Compute voxel indices inside the box (simplified AABB logic)
             x_min, x_max = cx - w/2, cx + w/2
             y_min, y_max = cy - h/2, cy + h/2
@@ -44,7 +51,7 @@ def assign_gt_to_voxels(grid, gtl, debug, ignore_class_id=-1):
             inside = (xs >= x_min) & (xs <= x_max) & \
                      (ys >= y_min) & (ys <= y_max) & \
                      (zs >= z_min) & (zs <= z_max)
-    
+                     
             if int(cat) == ignore_class_id:
                 assignments[inside] = -2  # Ignored class (e.g. Tram)
             else:
@@ -80,6 +87,7 @@ class loss_3d(nn.Module):
         self.gamma = self.cfg.loss.gamma
         self.loss = {}
         self.debug = self.cfg.debug
+        self.voxel_size = self.cfg.grid_unc
         
         
     def object_conf_loss(self, pred_obj_logits, voxel_assignments):
@@ -219,7 +227,7 @@ class loss_3d(nn.Module):
         assignments = []
         c_voxels = []
         for i in range(self.B):
-            ass, center_voxels = assign_gt_to_voxels(grid, gtl[i], self.debug)  # shape of ass: (res_w, res_h, res_d)
+            ass, center_voxels = assign_gt_to_voxels(grid, gtl[i], self.voxel_size, self.debug)  # shape of ass: (res_w, res_h, res_d)
             assignments.append(ass)
             c_voxels.append(center_voxels)
                 
