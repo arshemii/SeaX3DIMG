@@ -82,7 +82,6 @@ class loss_3d(nn.Module):
         self.cfg = cfg
         self.num_c = self.cfg.model.num_class
         self.loss_weights = self.cfg.loss.weight
-        self.B = self.cfg.num_batch
         self.alpha = self.cfg.loss.alpha
         self.gamma = self.cfg.loss.gamma
         self.loss = {}
@@ -212,12 +211,13 @@ class loss_3d(nn.Module):
             else:
                 gtl_sample = []
                 c_voxels_sample = []
-                
+                new_idx = 0
                 for centers in init_c_voxels[bn]:
                     i, j, k, gt_idx = centers
                     if oob_mask_valid[i, j, k] == True:
-                        c_voxels_sample.append((i, j, k, gt_idx))
+                        c_voxels_sample.append((i, j, k, new_idx))
                         gtl_sample.append(init_gtl[bn][gt_idx])
+                        new_idx += 1
                     else:
                         assignments[bn][assignments[bn] == gt_idx] = -1
                         
