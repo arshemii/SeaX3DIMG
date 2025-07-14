@@ -109,7 +109,7 @@ class Trainer:
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
             
-            pbar.set_postfix({'loss': f"{running_loss}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
+            pbar.set_postfix({'loss': f"{avg_loss}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
             
         self.scheduler.step()
         

@@ -31,7 +31,7 @@ def config_generator():
     cfg.dev.eval_in_train = False
     
     cfg.num_batch = 1
-    cfg.num_worker = 4
+    cfg.num_worker = 0
     
     cfg.log_dir = './logging_dir'
     cfg.logging = False
