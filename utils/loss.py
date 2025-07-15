@@ -160,7 +160,7 @@ class loss_3d(nn.Module):
         grid: [W, H, D, 3]
         """
         
-        loss = torch.tensor(0.0, device=pred_offsets.device, dtype=pred_offsets.dtype, requires_grad = True)
+        loss = []
         count = 0
         for b in range(self.B):
             if len(gtl[b]) == 0:
