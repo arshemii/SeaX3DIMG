@@ -94,7 +94,8 @@ class loss_3d(nn.Module):
         pred_obj_logits: [B, 1, W, H, D]
         voxel_assignments: a list of tensors with lenght = B and -1=bg, -2=ignored, >=0=object
         """
-        loss = torch.tensor(0.0, device=pred_obj_logits.device, dtype=pred_obj_logits.dtype, requires_grad = True)
+        loss = []
+        
         for b in range(self.B):
             if len(gtl[b]) == 0:
                 continue
@@ -103,13 +104,20 @@ class loss_3d(nn.Module):
                 valid = (voxel_assignments[b] != -2)
                 pred = pred_obj_logits[b, 0][valid]
                 tgt = target[valid]
+                
+                if pred.numel() == 0:
+                    continue  # skip this batch if no valid voxels
         
                 # Focal BCE
                 bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
                 pt = torch.exp(-bce)
                 focal_loss = self.alpha * (1 - pt) ** self.gamma * bce
-                loss += focal_loss.mean()
-        return loss / self.B
+                loss.append(focal_loss.mean())
+                
+        if len(loss) == 0:
+            return torch.tensor(0.0, device=pred_obj_logits.device, requires_grad=True)
+        else:
+            return torch.stack(loss).mean()
     
     def classification_loss(self, pred_cls_logits, center_voxels, gtl):
         """
@@ -118,7 +126,7 @@ class loss_3d(nn.Module):
                         First list is for all batch, second list is for all dets in a frame
         """
         
-        loss = torch.tensor(0.0, device=pred_cls_logits.device, dtype=pred_cls_logits.dtype, requires_grad = True)
+        loss = []
         count = 0
         for b in range(self.B):
             if len(gtl[b]) == 0:
@@ -139,9 +147,12 @@ class loss_3d(nn.Module):
                     ce = nn.functional.cross_entropy(pred, target_cls, reduction='none')
                     pt = torch.exp(-ce)
                     focal_loss = self.alpha * (1 - pt) ** self.gamma * ce
-                    loss += focal_loss.mean()
-                    count += 1
-        return loss / max(count, 1)
+                    loss.append(focal_loss.mean())
+
+        if len(loss) == 0:
+            return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True)
+        else:
+            return torch.stack(loss).mean()
     
     def center_loss(self, pred_offsets, center_voxels, gtl, grid):
         """
