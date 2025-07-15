@@ -94,7 +94,7 @@ class loss_3d(nn.Module):
         pred_obj_logits: [B, 1, W, H, D]
         voxel_assignments: a list of tensors with lenght = B and -1=bg, -2=ignored, >=0=object
         """
-        loss = torch.tensor(0.0, device=pred_obj_logits.device, dtype=pred_obj_logits.dtype)
+        loss = torch.tensor(0.0, device=pred_obj_logits.device, dtype=pred_obj_logits.dtype, requires_grad = True)
         for b in range(self.B):
             if len(gtl[b]) == 0:
                 continue
@@ -118,7 +118,7 @@ class loss_3d(nn.Module):
                         First list is for all batch, second list is for all dets in a frame
         """
         
-        loss = torch.tensor(0.0, device=pred_cls_logits.device, dtype=pred_cls_logits.dtype)
+        loss = torch.tensor(0.0, device=pred_cls_logits.device, dtype=pred_cls_logits.dtype, requires_grad = True)
         count = 0
         for b in range(self.B):
             if len(gtl[b]) == 0:
@@ -149,7 +149,7 @@ class loss_3d(nn.Module):
         grid: [W, H, D, 3]
         """
         
-        loss = torch.tensor(0.0, device=pred_offsets.device, dtype=pred_offsets.dtype)
+        loss = torch.tensor(0.0, device=pred_offsets.device, dtype=pred_offsets.dtype, requires_grad = True)
         count = 0
         for b in range(self.B):
             if len(gtl[b]) == 0:
@@ -170,7 +170,7 @@ class loss_3d(nn.Module):
         pred_dims: [B, 3, W, H, D]
         """
         
-        loss = torch.tensor(0.0, device=pred_dims.device, dtype=pred_dims.dtype)
+        loss = torch.tensor(0.0, device=pred_dims.device, dtype=pred_dims.dtype, requires_grad = True)
         count = 0
         for b in range(self.B):
             if len(gtl[b]) == 0:
@@ -187,7 +187,7 @@ class loss_3d(nn.Module):
         """
         pred_yaw: [B, 1, W, H, D]
         """
-        loss = torch.tensor(0.0, device=pred_yaw.device, dtype=pred_yaw.dtype)
+        loss = torch.tensor(0.0, device=pred_yaw.device, dtype=pred_yaw.dtype, requires_grad = True)
         count = 0
         for b in range(self.B):
             if len(gtl[b]) == 0:
