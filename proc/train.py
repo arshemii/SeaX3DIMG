@@ -103,7 +103,7 @@ class Trainer:
                 loss = self.loss_fn(outputs, batch["label"], self.grid, oob_mask_valid)
                 
             # TODO: must be removed
-            print(f"Loss value before scaling: {loss}")
+            print(f"Loss value before scaling: {loss['total'].item()}")
             scaler.scale(loss['total']).backward()
             scaler.step(self.optimizer)
             scaler.update()
