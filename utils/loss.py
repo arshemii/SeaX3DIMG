@@ -95,6 +95,12 @@ class loss_3d(nn.Module):
         """
         loss = []
         
+        if self.lb:
+            print("==>   object_conf_loss checks: -----")
+            print(f"==> value of self.B is {self.B}")
+            print(f"length of gtl in confidence loss is: {len(gtl)}")
+            
+            
         for b in range(self.B):
             if len(gtl[b]) == 0:
                 continue
@@ -268,7 +274,7 @@ class loss_3d(nn.Module):
             print("-------------------- loss forward started--------------------")
             print(f" ==> gtl is list?  {isinstance (init_gtl, list)}")
             if len(init_gtl) > 0:
-                print(f" ==> gtl is list?  {isinstance (init_gtl[0], list)}")
+                print(f" ==> gtl[0] is list?  {isinstance (init_gtl[0], list)}")
         
         # first part: a function to match each gt detection to corresponding voxels and find which voxel is closest to the box center
         assert grid.shape[-1] == 3, f"Expected grid[..., 3] for (x,y,z), got shape {grid.shape}"
