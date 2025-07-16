@@ -86,7 +86,7 @@ class loss_3d(nn.Module):
         self.gamma = self.cfg.loss.gamma
         self.debug = self.cfg.debug
         self.voxel_size = self.cfg.grid_unc
-        
+        self.lb = True  # local debug
         
     def object_conf_loss(self, pred_obj_logits, voxel_assignments, gtl):
         """
@@ -126,7 +126,6 @@ class loss_3d(nn.Module):
         """
         
         loss = []
-        count = 0
         for b in range(self.B):
             if len(gtl[b]) == 0:
                 continue
@@ -265,13 +264,24 @@ class loss_3d(nn.Module):
             
         *** Prediction comes like [n, out_ch, w_res, h_res, d_res]
         """
-        # TODO: what happens when no detection is there?
-        # change to consider only objectness loss, and the rest are zero
+        if self.lb:
+            print("-------------------- loss forward started--------------------")
+            print(f" ==> gtl is list?  {isinstance (init_gtl, list)}")
+            if len(init_gtl) > 0:
+                print(f" ==> gtl is list?  {isinstance (init_gtl[0], list)}")
         
         # first part: a function to match each gt detection to corresponding voxels and find which voxel is closest to the box center
         assert grid.shape[-1] == 3, f"Expected grid[..., 3] for (x,y,z), got shape {grid.shape}"
         self.B = len(prediction)
         self.loss = {}
+        
+        if self.lb:
+            print(f" ==>  Value of self.B is :  {self.B}")
+            print(f" ==>  lenght of prediction is :  {len(prediction)}")
+            print(f" ==>  shape of prediction is :  {prediction.shape()}")
+            print(f" ==>  lenght of init_gtl is :  {len(init_gtl)}")
+            if len(init_gtl) > 0:
+                print(f" ==>  detection numbers in first sample of batch :  {len(init_gtl[0])}")
         
         if self.B == 0:
             device = prediction.device
@@ -283,7 +293,12 @@ class loss_3d(nn.Module):
             ass, center_voxels = assign_gt_to_voxels(grid, init_gtl[i], self.voxel_size, self.debug)  # shape of ass: (res_w, res_h, res_d)
             assignments.append(ass)
             init_c_voxels.append(center_voxels)
-
+            
+        if self.lb:
+            print(f" ==>  lenght of initial voxel centers is :  {len(init_c_voxels)}")
+            print(f" ==>  lenght of initial assignment is :  {len(assignments)}")
+            if len(init_c_voxels) > 0:
+                print(f" ==>  lenght of the first sample in initial voxel centers is :  {len(init_c_voxels[0])}")
         
         # Intermdiate step: refine detections (drop out)
         assignments, c_voxels, gtl = self._drop_dets(assignments,
@@ -291,6 +306,10 @@ class loss_3d(nn.Module):
                                                      init_gtl,
                                                      oob_mask_valid)
         
+        if self.lb:
+            print(f" ==>  lenght of dropped voxel centers is :  {len(c_voxels)}")
+            print(f" ==>  lenght of dropped assignment is :  {len(assignments)}")
+            print(f" ==>  lenght of dropped gtl is :  {len(gtl)}")
         
         # Second part: objectness loss
         self.loss['obj_conf'] = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments, gtl)
@@ -317,7 +336,10 @@ class loss_3d(nn.Module):
                                 self.loss_weights[2]*self.loss['center_loss'] + \
                                 self.loss_weights[3]*self.loss['dim_loss'] + \
                                 self.loss_weights[4]*self.loss['yaw_angle_loss']
-
+                                
+        if self.lb:
+            print("-------------------- loss forward ended--------------------")
+            
         return self.loss
     
     def accumulate_loss(self):
