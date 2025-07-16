@@ -84,7 +84,6 @@ class loss_3d(nn.Module):
         self.loss_weights = self.cfg.loss.weight
         self.alpha = self.cfg.loss.alpha
         self.gamma = self.cfg.loss.gamma
-        self.loss = {}
         self.debug = self.cfg.debug
         self.voxel_size = self.cfg.grid_unc
         
@@ -161,7 +160,6 @@ class loss_3d(nn.Module):
         """
         
         loss = []
-        count = 0
         for b in range(self.B):
             if len(gtl[b]) == 0:
                 continue
@@ -171,45 +169,54 @@ class loss_3d(nn.Module):
                     pred_offset = pred_offsets[b, :, i, j, k]
                     pred_center = voxel_center + pred_offset
         
-                    gt_center = gtl[b][gt_idx]['bbox3d'][3:6]
-                    loss += nn.functional.l1_loss(pred_center, gt_center)
-                    count += 1
-        return loss / max(count, 1)
+                    gt_center = gtl[b][gt_idx]['bbox3d'][3:6].to(pred_offset.device)
+                    loss.append(nn.functional.l1_loss(pred_center, gt_center))
+        
+        if len(loss) == 0:
+            return torch.tensor(0.0, device=pred_offsets.device, requires_grad=True)
+        else:
+            return torch.stack(loss).mean()
     
     def dimension_loss(self, pred_dims, center_voxels, gtl):
         """
         pred_dims: [B, 3, W, H, D]
         """
         
-        loss = torch.tensor(0.0, device=pred_dims.device, dtype=pred_dims.dtype, requires_grad = True)
-        count = 0
+        loss = []
+        
         for b in range(self.B):
             if len(gtl[b]) == 0:
                 continue
             else:
                 for (i, j, k, gt_idx) in center_voxels[b]:
                     pred = pred_dims[b, :, i, j, k]
-                    gt = gtl[b][gt_idx]['bbox3d'][0:3]
-                    loss += nn.functional.l1_loss(pred, gt)
-                    count += 1
-        return loss / max(count, 1)
+                    gt = gtl[b][gt_idx]['bbox3d'][0:3].to(pred.device)
+                    loss.append(nn.functional.l1_loss(pred, gt))
+                    
+        if len(loss) == 0:
+            return torch.tensor(0.0, device=pred_dims.device, requires_grad=True)
+        else:
+            return torch.stack(loss).mean()
     
     def yaw_loss(self, pred_yaw, center_voxels, gtl):
         """
         pred_yaw: [B, 1, W, H, D]
         """
-        loss = torch.tensor(0.0, device=pred_yaw.device, dtype=pred_yaw.dtype, requires_grad = True)
-        count = 0
+        loss = []
+        
         for b in range(self.B):
             if len(gtl[b]) == 0:
                 continue
             else:
                 for (i, j, k, gt_idx) in center_voxels[b]:
                     pred = pred_yaw[b, 0, i, j, k]
-                    gt = gtl[b][gt_idx]['bbox3d'][6]
-                    loss += nn.functional.smooth_l1_loss(pred, gt)
-                    count += 1
-        return loss / max(count, 1)
+                    gt = gtl[b][gt_idx]['bbox3d'][6].to(pred.device)
+                    loss.append(nn.functional.smooth_l1_loss(pred, gt))
+
+        if len(loss) == 0:
+            return torch.tensor(0.0, device=pred_yaw.device, requires_grad=True)
+        else:
+            return torch.stack(loss).mean()
     
     def _drop_dets(self, assignments, init_c_voxels, init_gtl, oob_mask_valid):
 
@@ -262,9 +269,13 @@ class loss_3d(nn.Module):
         # change to consider only objectness loss, and the rest are zero
         
         # first part: a function to match each gt detection to corresponding voxels and find which voxel is closest to the box center
-        assert grid.shape[-1] == 3
+        assert grid.shape[-1] == 3, f"Expected grid[..., 3] for (x,y,z), got shape {grid.shape}"
         self.B = len(prediction)
-        #print(f"==> output of the mode is in: {prediction.device}")
+        self.loss = {}
+        
+        if self.B == 0:
+            device = prediction.device
+            return {k: torch.tensor(0.0, device=device) for k in ['obj_conf', 'cls_loss', 'center_loss', 'dim_loss', 'yaw_angle_loss', 'total']}
         
         assignments = []
         init_c_voxels = []
