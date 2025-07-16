@@ -278,7 +278,7 @@ class loss_3d(nn.Module):
         if self.lb:
             print(f" ==>  Value of self.B is :  {self.B}")
             print(f" ==>  lenght of prediction is :  {len(prediction)}")
-            print(f" ==>  shape of prediction is :  {prediction.shape()}")
+            print(f" ==>  shape of prediction is :  {prediction.shape}")
             print(f" ==>  lenght of init_gtl is :  {len(init_gtl)}")
             if len(init_gtl) > 0:
                 print(f" ==>  detection numbers in first sample of batch :  {len(init_gtl[0])}")
