@@ -245,8 +245,8 @@ class loss_3d(nn.Module):
                     else:
                         assignments[bn][assignments[bn] == gt_idx] = -1
                         
-            gtl.append(gtl_sample)
-            c_voxels.append(c_voxels_sample)
+            gtl[bn] = gtl_sample
+            c_voxels[bn] = c_voxels_sample
                         
         return assignments, c_voxels, gtl
 
