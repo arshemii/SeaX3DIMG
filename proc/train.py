@@ -60,7 +60,7 @@ class Trainer:
     
     def _print_train_stats(self, epoch, avg_loss, metrics, train_time):
         # TODO: use method print_metrics from metric_module object
-        print(f"Training epoch {epoch} with loss {avg_loss:.2f} in {train_time():.2f}")
+        print(f"Training epoch {epoch} with loss {avg_loss:.2f} in {train_time:.2f}")
     
     def train_epoch(self, epoch):
         self.model.train()
