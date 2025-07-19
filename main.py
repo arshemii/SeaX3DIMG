@@ -76,6 +76,8 @@ def training(cfg):
         resume_checkpoint = None
     else:
         resume_checkpoint = max(glob.glob("checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
+        print(f"Start training with {resume_checkpoint}")
+        
     
     trainer = Trainer(cfg, model, dataset, grid, collate_fn, metric_module,
                  optimizer, scheduler, loss_fn, resume_checkpoint)
