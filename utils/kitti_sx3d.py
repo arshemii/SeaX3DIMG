@@ -17,7 +17,7 @@ class kitti_sx3d(Dataset):
         
         if self.mode == 'train':
             self.data_dir = self.cfg.data.path + 'training/'
-            self.DF = du.parse_id_file(self.cfg.data.path + 'train.txt', self.data_dir)
+            self.DF = du.parse_id_file(self.cfg.data.path + 'train_small.txt', self.data_dir)
             #if self.cfg.debug:
             #    print(f"==> length of the dataframe is: {len(self.DF)}")
             #    print(f"==> Keys are: {self.DF[10].keys()}")

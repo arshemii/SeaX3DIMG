@@ -58,7 +58,7 @@ class Trainer:
         self.dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True,
                                      collate_fn=self.collate_fn, num_workers=self.num_workers)
     
-    def _print_train_stats(epoch, avg_loss, metrics, train_time):
+    def _print_train_stats(self, epoch, avg_loss, metrics, train_time):
         # TODO: use method print_metrics from metric_module object
         print(f"Training epoch {epoch} with loss {avg_loss:.2f} in {train_time():.2f}")
     
@@ -115,6 +115,8 @@ class Trainer:
                 
             # TODO: must be removed
             if torch.isnan(loss['total']) or loss['total'].item() == 0.0:
+                # Clear unused memory to reduce fragmentation (ChatGPT)
+                torch.cuda.empty_cache()
                 print(f"==> Skipping optimizer step — Loss is {loss['total'].item()}")
                 continue
             
