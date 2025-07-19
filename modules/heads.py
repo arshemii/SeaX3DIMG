@@ -45,9 +45,16 @@ class head_box_3d(nn.Module):
             print("==> Head: concat")
         x = torch.cat([x1, x2], dim=1)
         
+        # TODO: reduce overhead
+        del x1, x2
+        
         if self.debug:
             print("==> Head: final head module!!!")
         out = self.head(x)
+        
+        # TODO: reduce overhead
+        del x
+        
         # Output shape: (1, out_ch, 30, 100, 70)
         return out
     

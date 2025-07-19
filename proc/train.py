@@ -94,8 +94,14 @@ class Trainer:
                 temporal_l = self.model.create_memory(batch["left_img_previous"])
                 full_output = self.model(batch["left_img"], batch["right_img"], temporal_l)
                 
+                # TODO: reduce memory oh
+                del temporal_l
+                
                 outputs = full_output[0]  # main prediction
                 oob_mask_valid = full_output[2]
+                
+                # TODO: reduce memory oh
+                del full_output
                 
                 if self.metric_module:
                     if epoch % 4 == 0:
@@ -103,6 +109,9 @@ class Trainer:
                 
                 assert "label" in batch.keys()
                 loss = self.loss_fn(outputs, batch["label"], self.grid, oob_mask_valid)
+                
+                # TODO: reduce overhead
+                del outputs, oob_mask_valid
                 
             # TODO: must be removed
             if torch.isnan(loss['total']) or loss['total'].item() == 0.0:
