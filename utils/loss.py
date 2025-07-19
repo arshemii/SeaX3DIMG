@@ -224,9 +224,10 @@ class loss_3d(nn.Module):
             return torch.stack(loss).mean()
     
     def _drop_dets(self, assignments, init_c_voxels, init_gtl, oob_mask_valid):
-
-        gtl = []
-        c_voxels = []
+        
+        n = len(init_gtl)
+        gtl = [[] for _ in range(n)]
+        c_voxels = [[] for _ in range(n)]
         
         for bn in range(len(assignments)):
             if len(init_gtl[bn]) == 0:
