@@ -73,10 +73,9 @@ class Trainer:
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         for batch_idx, batch in pbar:
             
-            if batch_idx % 20 == 0:
-                print(f"[Step {batch_idx}] Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB | Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB")
+            print(f"[Step {batch_idx}] Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB | Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB")
             
-            batch["calib"] = batch["calib"].to(self.device)
+            # batch["calib"] = batch["calib"].to(self.device)
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
@@ -84,7 +83,7 @@ class Trainer:
             for sample in batch["label"]:
                 for label in sample:
                     label['category'] = label['category'].to(self.device)
-                    label['bbox2d'] = label['bbox2d'].to(self.device)
+                    # label['bbox2d'] = label['bbox2d'].to(self.device)
                     label['bbox3d'] = label['bbox3d'].to(self.device)
 
             
@@ -93,10 +92,10 @@ class Trainer:
             #create temporal memory for both left and right image from t - dt
             with autocast(device_type='cuda'):
                 temporal_l = self.model.create_memory(batch["left_img_previous"])
-                full_output = self.model(batch["left_img"], batch["right_img"], temporal_l, batch["calib"])
+                full_output = self.model(batch["left_img"], batch["right_img"], temporal_l)
                 
                 outputs = full_output[0]  # main prediction
-                oob_mask_valid = full_output[3]
+                oob_mask_valid = full_output[2]
                 
                 if self.metric_module:
                     if epoch % 4 == 0:

@@ -23,7 +23,7 @@ class SX3DIMG(nn.Module):
         self.cfg = cfg
         self.debug = self.cfg.debug
         self.logs = self.cfg.logging
-        # self.logger = setup_logger('SX3DIMG_logs', self.cfg.log_dir)
+        # TODO: self.logger = setup_logger('SX3DIMG_logs', self.cfg.log_dir)
         self.is_train_backbone = is_train_backbone
         
         self.device = self.cfg.device[0]
@@ -32,14 +32,17 @@ class SX3DIMG(nn.Module):
         
         self.grid_obj = GridGenerator(self.cfg.grid_size, self.cfg.grid_unc) # points in cam coordinates
         self.grid = self.grid_obj.get_grid()['grid'].to(dtype=torch.float32)
-        self.grid = self.grid.to(self.device)
+        # TODO: removed to device from grid (following line)
+        self.grid = self.grid
         self.grid_resolution = tuple(int(round(size / res)) for size, res in zip(self.cfg.grid_size, self.cfg.grid_unc))
         
         
         if self.cfg.camera.P_l is not None:
-            self.P_l = cfg.camera.P_l[0].to(self.device)
+            # TODO: removed to device from p_l (following line)
+            self.P_l = cfg.camera.P_l[0]
             self.grid_img = cam_to_img(self.grid, self.P_l)
-            self.oob_mask = oob_voxels(self.grid_img, self.cfg.model.in_size).to(self.device)
+            # TODO: removed to device from oob_mask (following line)
+            self.oob_mask = oob_voxels(self.grid_img, self.cfg.model.in_size)
             self.oob_mask_valid = ~self.oob_mask
             self.oob_mask_flat = self.oob_mask_valid.view(-1)
             self.grid_flat = grid_for_sample(self.grid_img, (self.h, self.w))
@@ -130,6 +133,9 @@ class SX3DIMG(nn.Module):
         # Remove batch and last dim → shape: [256, num_valid_points]
         voxel_squeezed = voxel.squeeze(0).squeeze(-1)
         
+        # TODO: reduce memory oh
+        del voxel
+        
         # Insert into valid positions
         valid_indices = self.oob_mask_flat.nonzero(as_tuple=False).squeeze(1)  # shape: [valid_voxels]
         full_voxel[0, :, valid_indices] = voxel_squeezed  # full_voxel: [1, 256, total_voxels]
@@ -141,13 +147,17 @@ class SX3DIMG(nn.Module):
         # grid is in 1, n_h*n_w*n_d, 1, 2 in VU. So:
         
         N_F = tensor.shape[1]
-                
+        N_B = tensor.shape[0]
+        
         voxel = F.grid_sample(tensor, self.grid_flat_batch,
                             mode='bilinear', align_corners=True)
         
+        # TODO: reduce memory oh
+        del tensor
+        
         full_voxel = self._voxel_filler(voxel)
         
-        full_voxel = full_voxel.reshape(tensor.shape[0], N_F,
+        full_voxel = full_voxel.reshape(N_B, N_F,
                                         self.grid_resolution[0], self.grid_resolution[1], self.grid_resolution[2])
         
         return full_voxel
@@ -158,7 +168,7 @@ class SX3DIMG(nn.Module):
     def _init_3d_head(self):
         self.head = HD.head_box_3d(self.cfg)
         
-    def forward(self, img_l, img_r, mem_left, calib):
+    def forward(self, img_l, img_r, mem_left, calib = None):
         """
         img_l and img_r: a torch tensor of shape (n, 3, 512, 960)
         mem_left and mem_right: tensors of shape 1, 3, 128, 240
@@ -188,16 +198,27 @@ class SX3DIMG(nn.Module):
         mem_l = self.conv2d_memory(left_f)
         mem_l = self.bn_memory(mem_l)
         output_memory = self.relu_create_mem(mem_l)
+        
+        # TODO: reduce memory oh
+        del mem_l
+        
         if self.debug:        
             print("==> output memory is created")
         assert output_memory.shape[2] == int(self.h/4)
         
         # keeping left features for final concatenation
         base_feature = torch.cat([left_f, mem_left], dim = 1)
+        
+        # TODO: reduce memory oh
+        del mem_left
+        
         if self.debug:
             print("==> Stereo matching started")
         # matching stage
         matched_tensor = self.matching_module(left_f, right_f, base_feature)
+        
+        # TODO: reduce memory oh
+        del left_f, right_f, base_feature
         
         if self.debug:  
             print("==> Voxelization started")
@@ -211,8 +232,8 @@ class SX3DIMG(nn.Module):
             out = self.head(voxel)
         else:
             raise NotImplementedError("other representation ehad methods!")
-        # TODO: to remove extra outputs
-        return out, output_memory, self.grid, self.oob_mask_valid
+        # TODO: to remove extra outputs (self.grid already removed)
+        return out, output_memory, self.oob_mask_valid
     
     def init_weights(self):
         raise NotImplementedError("not yet implemented")
