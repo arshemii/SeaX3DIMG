@@ -282,10 +282,8 @@ class loss_3d(nn.Module):
         self.loss = {}
         
         if self.lb:
-            print(f" ==>  Value of self.B is :  {self.B}")
-            print(f" ==>  lenght of prediction is :  {len(prediction)}")
+            print(f" ==>  Value of self.B is: {self.B}, lenght of prediction is: {len(prediction)}, lenght of init_gtl is: {len(init_gtl)}")
             print(f" ==>  shape of prediction is :  {prediction.shape}")
-            print(f" ==>  lenght of init_gtl is :  {len(init_gtl)}")
             if len(init_gtl) > 0:
                 print(f" ==>  detection numbers in first sample of batch :  {len(init_gtl[0])}")
         
@@ -301,10 +299,9 @@ class loss_3d(nn.Module):
             init_c_voxels.append(center_voxels)
             
         if self.lb:
-            print(f" ==>  lenght of initial voxel centers is :  {len(init_c_voxels)}")
-            print(f" ==>  lenght of initial assignment is :  {len(assignments)}")
+            print(f" ==>  lenght of init voxel cntr: {len(init_c_voxels)}, and init assignment is: {len(assignments)}")
             if len(init_c_voxels) > 0:
-                print(f" ==>  lenght of the first sample in initial voxel centers is :  {len(init_c_voxels[0])}")
+                print(f" ==>  detection number of 1st sample: {len(init_c_voxels[0])}")
         
         # Intermdiate step: refine detections (drop out)
         assignments, c_voxels, gtl = self._drop_dets(assignments,
@@ -313,9 +310,10 @@ class loss_3d(nn.Module):
                                                      oob_mask_valid)
         
         if self.lb:
-            print(f" ==>  lenght of dropped voxel centers is :  {len(c_voxels)}")
-            print(f" ==>  lenght of dropped assignment is :  {len(assignments)}")
-            print(f" ==>  lenght of dropped gtl is :  {len(gtl)}")
+            print(f" ==>  Dropped lenght --> voxel centers: {len(c_voxels)}, assignment: {len(assignments)}, gtl: {len(gtl)}")
+            if len(c_voxels) > 0:
+                print(f" ==>  detection number of 1st droped sample:  {len(c_voxels[0])}")
+                assert len(c_voxels[0]) >= len(init_c_voxels[0]), "After drop, must be equal or less detections!"
         
         # Second part: objectness loss
         self.loss['obj_conf'] = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments, gtl)

@@ -188,6 +188,7 @@ def img_resize(img, target_size):
         
         return final_img, scale, crop, 'w'
 
+# TODO: adjust it: do we change P or Intrinsics???
 def convert_calibration(P, scale, crop, direction):
     P = P.copy()
     
