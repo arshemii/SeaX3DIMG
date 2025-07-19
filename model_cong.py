@@ -22,7 +22,7 @@ def config_generator():
     cfg.loss = CN()
     cfg.eval = CN()
     
-    cfg.dev.num_epoch = 10
+    cfg.dev.num_epoch = 2
     cfg.dev.t_max = cfg.dev.num_epoch // 2
     cfg.dev.eta_min = 1e-6
     cfg.dev.mode = None
