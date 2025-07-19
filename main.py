@@ -75,7 +75,7 @@ def training(cfg):
     if len(os.listdir(cfg.model.sx3d.checkpoint)) == 0:
         resume_checkpoint = None
     else:
-        resume_checkpoint = max(glob.glob("checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
+        resume_checkpoint = max(glob.glob("./checkpoints/checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
         print(f"Start training with {resume_checkpoint}")
         
     
