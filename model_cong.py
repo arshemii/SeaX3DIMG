@@ -37,6 +37,7 @@ def config_generator():
     cfg.logging = False
     
     cfg.debug = False
+    cfg.debug_loss = False
     
     #cfg.device = ['cpu']
     cfg.device = [torch.device('cuda' if torch.cuda.is_available() else 'cpu')]

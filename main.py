@@ -12,15 +12,15 @@ Notes:
 
 """
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
 import glob
 import re
 import argparse 
 import torch
 
-def prepare_env():
-    import os
-    os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
-    os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+def check_env():
     
     from model_cong import config_generator
     cfg = config_generator()
@@ -103,7 +103,7 @@ if __name__ == "__main__":
         help="Development mode!"
     )
     
-    cfg = prepare_env()
+    cfg = check_env()
     
     cfg.dev.mode = parser.parse_args().mode
     

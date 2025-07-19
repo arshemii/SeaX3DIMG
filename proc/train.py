@@ -73,6 +73,9 @@ class Trainer:
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         for batch_idx, batch in pbar:
             
+            if batch_idx % 20 == 0:
+                print(f"[Step {batch_idx}] Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB | Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB")
+            
             batch["calib"] = batch["calib"].to(self.device)
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
@@ -110,6 +113,9 @@ class Trainer:
             scaler.scale(loss['total']).backward()
             scaler.step(self.optimizer)
             scaler.update()
+            
+            # Clear unused memory to reduce fragmentation (ChatGPT)
+            torch.cuda.empty_cache()
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)

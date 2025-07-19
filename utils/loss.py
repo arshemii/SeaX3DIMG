@@ -86,7 +86,7 @@ class loss_3d(nn.Module):
         self.gamma = self.cfg.loss.gamma
         self.debug = self.cfg.debug
         self.voxel_size = self.cfg.grid_unc
-        self.lb = True  # local debug
+        self.lb = self.cfg.debug_loss  # local debug
         
     def object_conf_loss(self, pred_obj_logits, voxel_assignments, gtl):
         """
