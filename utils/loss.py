@@ -77,6 +77,7 @@ def assign_gt_to_voxels(grid, gtl, voxel_size, debug, ignore_class_id=-1):
     # XXX: Objectness loss is corrected, considering no detection, removing gtl from method
     # XXX: classification is done now for all voxels belong to a detected object
     # XXX: center loss also is calculated for all voxels of an object
+    # TODO: dropping must be corrected!
 
 class loss_3d(nn.Module):
     def __init__(self, cfg):
@@ -131,15 +132,14 @@ class loss_3d(nn.Module):
                 continue
             else:
                 valid_mask = (assignments[b] >= 0) & (assignments[b] != -2)  # only valid object voxels
-                valid_mask.dtype
-                valid_mask.shape
                 if valid_mask.sum() == 0:
                     continue
                 
-                indices = assignments[valid_mask]  # [N], contains GT indices
+                indices = assignments[b][valid_mask]  # [N], contains GT indices
                 class_targets = []
                 
-                for gt_idx in indices:
+                for ids in indices:
+                    gt_idx = ids.item()
                     target_cls = gtl[b][int(gt_idx)]['category']
                     if target_cls == -1:
                         class_targets.append(-100)  # ignore class
@@ -157,13 +157,13 @@ class loss_3d(nn.Module):
         
                 loss.append(focal_loss.mean())
             
-            # XXX: reduce mem overhead
-            del pred_voxels, class_targets, valid_mask
+        # XXX: reduce mem overhead
+        del pred_voxels, class_targets, valid_mask
             
-            if len(loss) == 0:
-                return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True)
-            else:
-                return torch.stack(loss).mean()
+        if len(loss) == 0:
+            return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True)
+        else:
+            return torch.stack(loss).mean()
     
     def center_loss(self, pred_offsets, assignments, gtl, grid, oob_mask_valid):
         """
@@ -171,11 +171,14 @@ class loss_3d(nn.Module):
         grid: [W, H, D, 3]
         oob_mask_valid is: [100, 30, 70]
         """
+        if assignments[0].device != oob_mask_valid.device:
+            oob_mask_valid = oob_mask_valid.to(assignments[0].device)
+        
         loss = []
         for b in range(self.B):
             if len(gtl[b]) == 0:
                 continue
-            else:            
+            else:
                 # Mask for voxels inside image boundaries and for objects
                 valid_mask = (assignments[b] >= 0) & (assignments[b] != -2) & oob_mask_valid  # [W, H, D]
                 if valid_mask.sum() == 0:
@@ -264,26 +267,38 @@ class loss_3d(nn.Module):
         n = len(init_gtl)
         gtl = [[] for _ in range(n)]
         c_voxels = [[] for _ in range(n)]
-        
+    
         for bn in range(len(assignments)):
             if len(init_gtl[bn]) == 0:
                 continue
             else:
                 gtl_sample = []
                 c_voxels_sample = []
+                gt_map = {}  # maps original_gt_idx -> new_gt_idx
                 new_idx = 0
-                for centers in init_c_voxels[bn]:
-                    i, j, k, gt_idx = centers
-                    if oob_mask_valid[i, j, k] == True:
-                        c_voxels_sample.append((i, j, k, new_idx))
-                        gtl_sample.append(init_gtl[bn][gt_idx])
-                        new_idx += 1
-                    else:
-                        assignments[bn][assignments[bn] == gt_idx] = -1
-                        
-            gtl[bn] = gtl_sample
-            c_voxels[bn] = c_voxels_sample
-                        
+        
+                for i, j, k, gt_idx in init_c_voxels[bn]:
+                    if oob_mask_valid[i, j, k]:
+                        if gt_idx not in gt_map:
+                            gt_map[gt_idx] = new_idx
+                            gtl_sample.append(init_gtl[bn][gt_idx])
+                            new_idx += 1
+                        c_voxels_sample.append((i, j, k, gt_map[gt_idx]))
+        
+                # Now safely remap assignments
+                for old_idx, new_idx in gt_map.items():
+                    assignments[bn][assignments[bn] == old_idx] = new_idx
+        
+                # Set all non-included GT indices to -1
+                orig_indices = set(range(len(init_gtl[bn])))
+                dropped_indices = orig_indices - set(gt_map.keys())
+                for idx in dropped_indices:
+                    assignments[bn][assignments[bn] == idx] = -1
+        
+                gtl[bn] = gtl_sample
+                c_voxels[bn] = c_voxels_sample
+            
+        del init_c_voxels, init_gtl, 
         return assignments, c_voxels, gtl
 
     def forward(self, prediction, init_gtl, grid, oob_mask_valid):
@@ -325,22 +340,22 @@ class loss_3d(nn.Module):
         self.loss = {}
         
         # Assigining each voxe a ground truth index
-        assignments = []
+        init_assignments = []
         init_c_voxels = []
         for i in range(self.B):
             ass, center_voxels = assign_gt_to_voxels(grid, init_gtl[i], self.voxel_size, self.lb)
             # in case of no detection in gtl, center_voxels == []
             # in case of no detection in gtl, ass is tensor of -1 for all elements with shape (res_w, res_h, res_d)
-            assignments.append(ass)
+            init_assignments.append(ass)
             init_c_voxels.append(center_voxels)
             
-        assert len(assignments) == len(init_c_voxels) == self.B, "Batch size mismatch between assignment, voxel centers, and self.B"
+        assert len(init_assignments) == len(init_c_voxels) == self.B, "Batch size mismatch between assignment, voxel centers, and self.B"
         if self.lb:
             if len(init_c_voxels) > 0:
                 print(f" ==>  detection number of 1st sample based on voxel centers: {len(init_c_voxels[0])}")
         
         # Removing out of the bound detections from ground truth
-        assignments, c_voxels, gtl = self._drop_dets(assignments, init_c_voxels, init_gtl, oob_mask_valid)
+        assignments, c_voxels, gtl = self._drop_dets(init_assignments, init_c_voxels, init_gtl, oob_mask_valid)
         
         assert len(assignments) == len(c_voxels) == self.B, "Batch size mismatch between assignment, voxel centers, and self.B (post-drop)"
         if len(c_voxels) > 0:
