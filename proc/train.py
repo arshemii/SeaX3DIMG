@@ -128,9 +128,7 @@ class Trainer:
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
             
-            pbar.set_postfix({'loss': f"{avg_loss:.3f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}, \
-                              Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB, \
-                                  Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB"})
+            pbar.set_postfix({'loss': f"{avg_loss:.3f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}, Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB, Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB"})
             
         self.scheduler.step()
         
