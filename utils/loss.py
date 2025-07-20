@@ -76,7 +76,7 @@ def assign_gt_to_voxels(grid, gtl, voxel_size, debug, ignore_class_id=-1):
 # Corrections made:
     # XXX: Objectness loss is corrected, considering no detection, removing gtl from method
     # XXX: classification is done now for all voxels belong to a detected object
-
+    # XXX: center loss also is calculated for all voxels of an object
 
 class loss_3d(nn.Module):
     def __init__(self, cfg):
@@ -131,6 +131,8 @@ class loss_3d(nn.Module):
                 continue
             else:
                 valid_mask = (assignments[b] >= 0) & (assignments[b] != -2)  # only valid object voxels
+                valid_mask.dtype
+                valid_mask.shape
                 if valid_mask.sum() == 0:
                     continue
                 
