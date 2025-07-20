@@ -114,7 +114,7 @@ class loss_3d(nn.Module):
             loss.append(focal_loss.mean())
                 
         # XXX: reduce mem overhead
-        del target, valid, pred, tgt
+        # del target, valid, pred, tgt
         
         if len(loss) == 0:
             return torch.tensor(0.0, device=pred_obj_logits.device, requires_grad=True)
@@ -158,7 +158,7 @@ class loss_3d(nn.Module):
                 loss.append(focal_loss.mean())
             
         # XXX: reduce mem overhead
-        del pred_voxels, class_targets, valid_mask
+        # del pred_voxels, class_targets, valid_mask
             
         if len(loss) == 0:
             return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True)
@@ -209,7 +209,7 @@ class loss_3d(nn.Module):
             
                 loss.append(l1)
         
-        del l1, gt_centers, voxel_centers, valid_mask
+        # del l1, gt_centers, voxel_centers, valid_mask
         
         if len(loss) == 0:
             return torch.tensor(0.0, device=pred_offsets.device, requires_grad=True)
@@ -298,7 +298,7 @@ class loss_3d(nn.Module):
                 gtl[bn] = gtl_sample
                 c_voxels[bn] = c_voxels_sample
             
-        del init_c_voxels, init_gtl, 
+        # del init_c_voxels, init_gtl, 
         return assignments, c_voxels, gtl
 
     def forward(self, prediction, init_gtl, grid, oob_mask_valid):
