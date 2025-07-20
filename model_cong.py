@@ -150,6 +150,7 @@ def config_generator():
     cfg.loss.weight = [1.0, 1.0, 0.15, 0.05, 0.2]
     cfg.loss.alpha = 0.25
     cfg.loss.gamma = 2.0
+    cfg.loss.beta = 1.0
     
     cfg.num_epochs = 100
 

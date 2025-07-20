@@ -72,9 +72,7 @@ class Trainer:
                 
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         for batch_idx, batch in pbar:
-            
-            print(f"[Step {batch_idx}] Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB | Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB")
-            
+                        
             # batch["calib"] = batch["calib"].to(self.device)
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
@@ -130,7 +128,9 @@ class Trainer:
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
             
-            pbar.set_postfix({'loss': f"{avg_loss}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
+            pbar.set_postfix({'loss': f"{avg_loss:.3f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}, \
+                              Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB, \
+                                  Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB"})
             
         self.scheduler.step()
         

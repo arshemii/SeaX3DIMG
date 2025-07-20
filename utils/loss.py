@@ -8,6 +8,7 @@ Created on Thu Jun 26 21:14:47 2025
 import torch.nn as nn
 import torch
 import numpy as np
+import math
     
 
 def assign_gt_to_voxels(grid, gtl, voxel_size, debug, ignore_class_id=-1):
@@ -37,12 +38,12 @@ def assign_gt_to_voxels(grid, gtl, voxel_size, debug, ignore_class_id=-1):
             cat = gt["category"]
             h, w, l, cx, cy, cz, yaw = gt["bbox3d"]
             
-            #zero correction for inside
+            # Correct for small objects
             w = max(w, voxel_size[0])
             h = max(h, voxel_size[1])
             l = max(l, voxel_size[2])
                     
-            # Compute voxel indices inside the box (simplified AABB logic)
+            # AABB
             x_min, x_max = cx - w/2, cx + w/2
             y_min, y_max = cy - h/2, cy + h/2
             z_min, z_max = cz - l/2, cz + l/2
@@ -59,13 +60,12 @@ def assign_gt_to_voxels(grid, gtl, voxel_size, debug, ignore_class_id=-1):
                 
             # Find the voxel closest to GT center
             voxel_xyz = grid[inside]  # [N, 3]
-            assert len(voxel_xyz) != 0 and len(gtl) != 0
+            assert len(voxel_xyz) != 0 and len(gtl) != 0, "No voxel is assigned to a detection!"
             gt_center = torch.tensor([cx, cy, cz], device=grid.device)
             dists = torch.norm(voxel_xyz - gt_center, dim=1)
-            if debug:
-                print(f"==> shape of the voxel is {voxel_xyz.shape}")
-                print(f"==> shape of the centers is {gt_center.shape}")
-                print(f"==> length of the distances is {len(dists)}")
+            
+            assert len(dists) == len(voxel_xyz), "number of distances must be equal to the number of voxels!"
+            
             min_idx = torch.argmin(dists)
             idx_flat = torch.nonzero(inside, as_tuple=False)[min_idx]
             i, j, k = idx_flat.tolist()
@@ -73,7 +73,9 @@ def assign_gt_to_voxels(grid, gtl, voxel_size, debug, ignore_class_id=-1):
 
     return assignments, center_voxels
 
-
+# Corrections made:
+    # XXX: Objectness loss is corrected, considering no detection, removing gtl from method
+    # XXX: classification is done now for all voxels belong to a detected object
 
 
 class loss_3d(nn.Module):
@@ -84,103 +86,131 @@ class loss_3d(nn.Module):
         self.loss_weights = self.cfg.loss.weight
         self.alpha = self.cfg.loss.alpha
         self.gamma = self.cfg.loss.gamma
-        self.debug = self.cfg.debug
+        self.beta = self.cfg.loss.beta
         self.voxel_size = self.cfg.grid_unc
         self.lb = self.cfg.debug_loss  # local debug
         
-    def object_conf_loss(self, pred_obj_logits, voxel_assignments, gtl):
+    def object_conf_loss(self, pred_obj_logits, voxel_assignments):
         """
         pred_obj_logits: [B, 1, W, H, D]
         voxel_assignments: a list of tensors with lenght = B and -1=bg, -2=ignored, >=0=object
         """
         loss = []
-        
-        if self.lb:
-            print("==>   object_conf_loss checks: -----")
-            print(f"==> value of self.B is {self.B}")
-            print(f"length of gtl in confidence loss is: {len(gtl)}")
-            
-            
+
         for b in range(self.B):
-            if len(gtl[b]) == 0:
-                continue
-            else:
-                target = (voxel_assignments[b] >= 0).float()
-                valid = (voxel_assignments[b] != -2)
-                pred = pred_obj_logits[b, 0][valid]
-                tgt = target[valid]
-                
-                if pred.numel() == 0:
-                    continue  # skip this batch if no valid voxels
+            target = (voxel_assignments[b] >= 0).float()
+            valid = (voxel_assignments[b] != -2)
+            pred = pred_obj_logits[b, 0][valid]
+            tgt = target[valid]
+            
+            if pred.numel() == 0:
+                continue  # skip this batch if no valid voxels
         
-                # Focal BCE
-                bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
-                pt = torch.exp(-bce)
-                focal_loss = self.alpha * (1 - pt) ** self.gamma * bce
-                loss.append(focal_loss.mean())
+            # Focal BCE
+            bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
+            pt = torch.exp(-bce)
+            focal_loss = self.alpha * (1 - pt) ** self.gamma * bce
+            loss.append(focal_loss.mean())
                 
+        # XXX: reduce mem overhead
+        del target, valid, pred, tgt
+        
         if len(loss) == 0:
             return torch.tensor(0.0, device=pred_obj_logits.device, requires_grad=True)
         else:
             return torch.stack(loss).mean()
     
-    def classification_loss(self, pred_cls_logits, center_voxels, gtl):
+    def classification_loss(self, pred_cls_logits, assignments, gtl):
         """
         pred_cls_logits: [B, num_classes, W, H, D]
-        center_voxels: list of per-batch lists of [(i, j, k, gt_idx)]
-                        First list is for all batch, second list is for all dets in a frame
+        assignments: list of assignment space
         """
-        
         loss = []
         for b in range(self.B):
             if len(gtl[b]) == 0:
                 continue
             else:
-                for (i, j, k, gt_idx) in center_voxels[b]:
-                    # No need for one hot, should be [2]
-                    target_cls = gtl[b][gt_idx]['category']
-                    
+                valid_mask = (assignments[b] >= 0) & (assignments[b] != -2)  # only valid object voxels
+                if valid_mask.sum() == 0:
+                    continue
+                
+                indices = assignments[valid_mask]  # [N], contains GT indices
+                class_targets = []
+                
+                for gt_idx in indices:
+                    target_cls = gtl[b][int(gt_idx)]['category']
                     if target_cls == -1:
-                        continue
-                    
-                    pred = pred_cls_logits[b, :, i, j, k].unsqueeze(0)  # [1, C]
-                    # Why not softmax? No softmax, raw logits
-                    target_cls = target_cls.to(pred.device)
-                    assert pred.device == target_cls.device
-                    
-                    ce = nn.functional.cross_entropy(pred, target_cls, reduction='none')
-                    pt = torch.exp(-ce)
-                    focal_loss = self.alpha * (1 - pt) ** self.gamma * ce
-                    loss.append(focal_loss.mean())
-
-        if len(loss) == 0:
-            return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True)
-        else:
-            return torch.stack(loss).mean()
+                        class_targets.append(-100)  # ignore class
+                    else:
+                        class_targets.append(int(target_cls))
+                        
+                class_targets = torch.tensor(class_targets, device=pred_cls_logits.device)
+                
+                # Preds for valid voxels: [N, C]
+                pred_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[valid_mask]
+                
+                ce = nn.functional.cross_entropy(pred_voxels, class_targets, reduction='none', ignore_index=-100)
+                pt = torch.exp(-ce)
+                focal_loss = self.alpha * (1 - pt) ** self.gamma * ce
+        
+                loss.append(focal_loss.mean())
+            
+            # XXX: reduce mem overhead
+            del pred_voxels, class_targets, valid_mask
+            
+            if len(loss) == 0:
+                return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True)
+            else:
+                return torch.stack(loss).mean()
     
-    def center_loss(self, pred_offsets, center_voxels, gtl, grid):
+    def center_loss(self, pred_offsets, assignments, gtl, grid, oob_mask_valid):
         """
         pred_offsets: [B, 3, W, H, D]
         grid: [W, H, D, 3]
+        oob_mask_valid is: [100, 30, 70]
         """
-        
         loss = []
         for b in range(self.B):
             if len(gtl[b]) == 0:
                 continue
-            else:
-                for (i, j, k, gt_idx) in center_voxels[b]:
-                    voxel_center = grid[i, j, k, :]
-                    pred_offset = pred_offsets[b, :, i, j, k]
-                    pred_center = voxel_center + pred_offset
+            else:            
+                # Mask for voxels inside image boundaries and for objects
+                valid_mask = (assignments[b] >= 0) & (assignments[b] != -2) & oob_mask_valid  # [W, H, D]
+                if valid_mask.sum() == 0:
+                    continue
+            
+                # Only valid voxels
+                i, j, k = torch.nonzero(valid_mask, as_tuple=True)  # each is a (N,) tensor
+            
+                # Finding gt_idx of valid voxels
+                gt_indices = assignments[b][i, j, k] # is a (N,) tensor
+            
+                # Centers of valid voxels
+                voxel_centers = grid[i, j, k, :]  # (N, 3)
+            
+                # Predicted offsets
+                pred_offsets_valid = pred_offsets[b][:, i, j, k].permute(1, 0)  # (N, 3)
+            
+                # Predicted centers
+                pred_obj_centers = voxel_centers.to(pred_offsets.device) + pred_offsets_valid  # (N, 3)
+            
+                # Corresponding gt centers for each valid voxel
+                gt_centers = torch.stack([
+                    gtl[b][idx]['bbox3d'][3:6].to(pred_offsets.device) for idx in gt_indices], dim=0)  # (N, 3)
+            
+                # Compute L1 loss per voxel
+                l1 = nn.functional.smooth_l1_loss(pred_obj_centers, gt_centers, reduction='none', beta = self.beta)  # (N, 3)
+                l1 = l1.mean(dim=1)  # (N,)
+            
+                loss.append(l1)
         
-                    gt_center = gtl[b][gt_idx]['bbox3d'][3:6].to(pred_offset.device)
-                    loss.append(nn.functional.l1_loss(pred_center, gt_center))
+        del l1, gt_centers, voxel_centers, valid_mask
         
         if len(loss) == 0:
             return torch.tensor(0.0, device=pred_offsets.device, requires_grad=True)
         else:
-            return torch.stack(loss).mean()
+            return torch.cat(loss).mean()
+                    
     
     def dimension_loss(self, pred_dims, center_voxels, gtl):
         """
@@ -216,7 +246,11 @@ class loss_3d(nn.Module):
                 for (i, j, k, gt_idx) in center_voxels[b]:
                     pred = pred_yaw[b, 0, i, j, k]
                     gt = gtl[b][gt_idx]['bbox3d'][6].to(pred.device)
-                    loss.append(nn.functional.smooth_l1_loss(pred, gt))
+                    
+                    # minimal angle difference (in radians) in range [-π, π]
+                    diff = (pred - gt + math.pi) % (2 * math.pi) - math.pi
+                    
+                    loss.append(nn.functional.smooth_l1_loss(diff, torch.tensor(0.0, device=pred_yaw.device)))
 
         if len(loss) == 0:
             return torch.tensor(0.0, device=pred_yaw.device, requires_grad=True)
@@ -258,8 +292,9 @@ class loss_3d(nn.Module):
             pred[num_class + 1 : num_class + 4] = offsets from voxel center,
             pred[num_class + 4 : num_class + 7] = object dimensions,
             pred[-1] = object box yaw angle
+            *** Prediction comes like [n, out_ch, w_res, h_res, d_res]
             
-        gtl is is a list (length is num_batch) where for gt in gtl[index]:
+        init_gtl is is a list (length is num_batch) where for gt in gtl[index]:
             gt['category'] = object class (zero to num_classes-1 and -1 for not important objects)
             gt['bbox3d'] = order is: h, w, l, cx, cy, cz, yaw
             
@@ -268,63 +303,58 @@ class loss_3d(nn.Module):
             
         oob_mask_valid is:
             shape 100, 30, 70 and where the voxel is out of boundary of image --> False otherwise, True
-            
-        *** Prediction comes like [n, out_ch, w_res, h_res, d_res]
         """
-        if self.lb:
-            print("-------------------- loss forward started--------------------")
-            print(f" ==> gtl is list?  {isinstance (init_gtl, list)}")
-            if len(init_gtl) > 0:
-                print(f" ==> gtl[0] is list?  {isinstance (init_gtl[0], list)}")
-        
-        # first part: a function to match each gt detection to corresponding voxels and find which voxel is closest to the box center
+
         assert grid.shape[-1] == 3, f"Expected grid[..., 3] for (x,y,z), got shape {grid.shape}"
-        self.B = len(prediction)
-        self.loss = {}
-        
-        if self.lb:
-            print(f" ==>  Value of self.B is: {self.B}, lenght of prediction is: {len(prediction)}, lenght of init_gtl is: {len(init_gtl)}")
-            print(f" ==>  shape of prediction is :  {prediction.shape}")
-            if len(init_gtl) > 0:
+        assert len(prediction) == len(init_gtl), "Values are not all equal, batch size mismatch with prediction"
+        assert prediction.shape == (len(init_gtl), 12, grid.shape[0], grid.shape[1], grid.shape[2]), \
+            f"Prediction has a wrong shape, expected shape is: [n, out_ch, w_res, h_res, d_res], received: {prediction.shape}"
+        assert isinstance (init_gtl, list) == True, "initial ground truth variable is not a list!"
+        if len(init_gtl) > 0:
+            assert isinstance (init_gtl[0], list) == True, "Each sample in the batch must have a list as griund truth!"
+            if self.lb:
                 print(f" ==>  detection numbers in first sample of batch :  {len(init_gtl[0])}")
         
+        self.B = len(prediction)
         if self.B == 0:
             device = prediction.device
             return {k: torch.tensor(0.0, device=device) for k in ['obj_conf', 'cls_loss', 'center_loss', 'dim_loss', 'yaw_angle_loss', 'total']}
         
+        self.loss = {}
+        
+        # Assigining each voxe a ground truth index
         assignments = []
         init_c_voxels = []
         for i in range(self.B):
-            ass, center_voxels = assign_gt_to_voxels(grid, init_gtl[i], self.voxel_size, self.debug)  # shape of ass: (res_w, res_h, res_d)
+            ass, center_voxels = assign_gt_to_voxels(grid, init_gtl[i], self.voxel_size, self.lb)
+            # in case of no detection in gtl, center_voxels == []
+            # in case of no detection in gtl, ass is tensor of -1 for all elements with shape (res_w, res_h, res_d)
             assignments.append(ass)
             init_c_voxels.append(center_voxels)
             
+        assert len(assignments) == len(init_c_voxels) == self.B, "Batch size mismatch between assignment, voxel centers, and self.B"
         if self.lb:
-            print(f" ==>  lenght of init voxel cntr: {len(init_c_voxels)}, and init assignment is: {len(assignments)}")
             if len(init_c_voxels) > 0:
                 print(f" ==>  detection number of 1st sample based on voxel centers: {len(init_c_voxels[0])}")
         
-        # Intermdiate step: refine detections (drop out)
-        assignments, c_voxels, gtl = self._drop_dets(assignments,
-                                                     init_c_voxels,
-                                                     init_gtl,
-                                                     oob_mask_valid)
+        # Removing out of the bound detections from ground truth
+        assignments, c_voxels, gtl = self._drop_dets(assignments, init_c_voxels, init_gtl, oob_mask_valid)
         
-        if self.lb:
-            print(f" ==>  Dropped lenght --> voxel centers: {len(c_voxels)}, assignment: {len(assignments)}, gtl: {len(gtl)}")
-            if len(c_voxels) > 0:
-                print(f" ==>  detection number of 1st droped sample:  {len(c_voxels[0])}")
+        assert len(assignments) == len(c_voxels) == self.B, "Batch size mismatch between assignment, voxel centers, and self.B (post-drop)"
+        if len(c_voxels) > 0:
                 assert len(init_c_voxels[0]) >= len(c_voxels[0]), "After drop, must be equal or less detections!"
+                if self.lb:
+                    print(f" ==>  detection number of 1st droped sample:  {len(c_voxels[0])}")
         
-        # Second part: objectness loss
-        self.loss['obj_conf'] = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments, gtl)
-        
+        # Objectness loss
+        self.loss['obj_conf'] = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments)
+                
         # Third part: class loss (might be useful if focal loss is used)
-        self.loss['cls_loss'] = self.classification_loss(prediction[:, 0:self.num_c], c_voxels, gtl)
+        self.loss['cls_loss'] = self.classification_loss(prediction[:, 0:self.num_c], assignments, gtl)
         
         # Forth part: bbox center loss
         self.loss['center_loss'] = self.center_loss(prediction[:, self.num_c+1 : self.num_c+4],
-                                       c_voxels, gtl, grid)
+                                       assignments, gtl, grid, oob_mask_valid)
         
         # Fifth part: bbox dim loss
         self.loss['dim_loss'] = self.dimension_loss(prediction[:, self.num_c+4: self.num_c+7],

@@ -17,7 +17,7 @@ class kitti_sx3d(Dataset):
         
         if self.mode == 'train':
             self.data_dir = self.cfg.data.path + 'training/'
-            self.DF = du.parse_id_file(self.cfg.data.path + 'train_small.txt', self.data_dir)
+            self.DF = du.parse_id_file(self.cfg.data.path + 'train.txt', self.data_dir)
             #if self.cfg.debug:
             #    print(f"==> length of the dataframe is: {len(self.DF)}")
             #    print(f"==> Keys are: {self.DF[10].keys()}")
@@ -55,8 +55,11 @@ class kitti_sx3d(Dataset):
         min_y = 0
         max_y = 0
         
+        yaw = []
+        
         for inst in self.DF:
             for det in inst['labels']:
+                yaw.append(det['bbox3d'][6])
                 box = det['bbox3d'][3:6]
                 
                 if box[1] < min_y:
@@ -74,6 +77,8 @@ class kitti_sx3d(Dataset):
         print(f"Y statistics - min: {min(y)} - max: {max(y)}")
         print(f"Z statistics - min: {min(z)} - max: {max(z)}")
         print(f"Max Y index: {max_id}, Min Y index: {min_id}")
+        
+        return yaw
         
     def __getitem__(self, index):
         instance = self.DF[index]
