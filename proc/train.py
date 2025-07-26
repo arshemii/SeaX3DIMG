@@ -187,7 +187,7 @@ class Trainer:
             }, checkpoint_path)
             
             if os.path.exists(checkpoint_path):
-                print(f"Removing checkpoints of epoch: {epoch - 1} ...")
+                print(f"Removing checkpoints of epoch: {epoch - 2} ...")
                 os.remove(checkpoint_path)
             
             # Save epoch logs
