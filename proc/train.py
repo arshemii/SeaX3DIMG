@@ -186,9 +186,10 @@ class Trainer:
                 'optimizer_state': self.optimizer.state_dict()
             }, checkpoint_path)
             
-            if os.path.exists(checkpoint_path):
+            checkpoint_path_prev = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch-2}.pth')
+            if os.path.exists(checkpoint_path_prev):
                 print(f"Removing checkpoints of epoch: {epoch - 2} ...")
-                os.remove(checkpoint_path)
+                os.remove(checkpoint_path_prev)
             
             # Save epoch logs
             self.save_epoch_log(epoch, avg_loss, metrics, train_time)
