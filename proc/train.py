@@ -177,11 +177,18 @@ class Trainer:
             
             # Save checkpoint
             checkpoint_path = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch}.pth')
+            
+            print(f"Saving checkpoints of epoch: {epoch} ...")
+            
             save_checkpoint({
                 'epoch': epoch + 1,
                 'model_state': self.model.state_dict(),
                 'optimizer_state': self.optimizer.state_dict()
             }, checkpoint_path)
+            
+            if os.path.exists(checkpoint_path):
+                print(f"Removing checkpoints of epoch: {epoch - 1} ...")
+                os.remove(checkpoint_path)
             
             # Save epoch logs
             self.save_epoch_log(epoch, avg_loss, metrics, train_time)
