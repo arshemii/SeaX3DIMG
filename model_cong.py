@@ -22,6 +22,7 @@ def config_generator():
     cfg.loss = CN()
     cfg.eval = CN()
     
+    cfg.dev.scheduler = 'OClr'  # options: 'OClr', 'CAlr'
     cfg.dev.num_epoch = 30
     cfg.dev.t_max = cfg.dev.num_epoch - 1
     cfg.dev.eta_min = 1e-5

@@ -40,7 +40,7 @@ def check_env():
     return cfg
 
 def training(cfg):
-    from torch.optim.lr_scheduler import CosineAnnealingLR
+    from torch.optim.lr_scheduler import CosineAnnealingLR, OneCycleLR
     from proc.train import Trainer
     from utils.data_utils import collate_fn
     from utils.kitti_sx3d import kitti_sx3d
@@ -58,8 +58,17 @@ def training(cfg):
     
     optimizer = torch.optim.AdamW(model.parameters(),
                                   lr = cfg.dev.lr, weight_decay = cfg.dev.weight_decay)
-    scheduler = CosineAnnealingLR(optimizer,
-                                  T_max = cfg.dev.t_max, eta_min = cfg.dev.eta_min)
+    if cfg.dev.scheduler == 'CAlr':
+        print("Training initialized and scheduled with CosineAnnealingLR")
+        scheduler = CosineAnnealingLR(optimizer,
+                                      T_max = cfg.dev.t_max, eta_min = cfg.dev.eta_min)
+    elif cfg.dev.scheduler == 'OClr':
+        print("Training initialized and scheduled with OneCycleLR")
+        scheduler = OneCycleLR(optimizer, max_lr=cfg.dev.lr, total_steps=cfg.dev.num_epoch * len(dataset),
+                               pct_start=0.3, anneal_strategy='cos', div_factor=25, final_div_factor=1e4)
+    else:
+        raise NotImplementedError("No other scheduler is implemented!")
+        
     
     grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc) # points in cam coordinates
     grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32).permute(1,2,3,0)
