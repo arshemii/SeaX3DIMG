@@ -146,8 +146,14 @@ class Trainer:
     
     def save_epoch_log(self, epoch, loss, metrics, train_time):
         log = {
-            'epoch': epoch,
+            'total epoch': self.num_epochs,
+            'start epoch': self.start_epoch,
+            'current epoch': epoch,
             'loss': loss,
+            'learning rate start': self.cfg.dev.lr,
+            'Weight decay': self.cfg.dev.weight_decay,
+            'T max': self.cfg.dev.t_max,
+            'Eta min': self.cfg.dev.eta_min,
             'train_time_sec': train_time,
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         }
