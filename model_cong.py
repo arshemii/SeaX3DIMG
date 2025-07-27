@@ -23,8 +23,8 @@ def config_generator():
     cfg.eval = CN()
     
     cfg.dev.num_epoch = 30
-    cfg.dev.t_max = cfg.dev.num_epoch // 2
-    cfg.dev.eta_min = 1e-6
+    cfg.dev.t_max = cfg.dev.num_epoch - 1
+    cfg.dev.eta_min = 1e-5
     cfg.dev.mode = None
     cfg.dev.lr = 1e-4
     cfg.dev.weight_decay = 1e-4
