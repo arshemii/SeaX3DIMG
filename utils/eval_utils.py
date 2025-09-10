@@ -2,6 +2,7 @@
 
 def iou_bev(box1, box2):
   """
+  ------- Important: no orientation is applied -------
   boxes are numpy arrays: x_min, y_min, x_max, y_max
   box example: np.array([x_min, y_min, x_max, y_max])
   """
@@ -29,6 +30,7 @@ def iou_bev(box1, box2):
 
 def iou_3d(box1, box2):
   """
+  ------- Important: no orientation is applied -------
   boxes are numpy arrays: x_min, y_min, z_min, x_max, y_max, z_max
   box example: np.array([x_min, y_min, z_min, x_max, y_max, z_max])
   """
@@ -54,3 +56,5 @@ def iou_3d(box1, box2):
   union_vol = vol1 + vol2 - inter_vol
 
   return inter_vol / union_vol if union_vol > 0 else 0.0
+
+
