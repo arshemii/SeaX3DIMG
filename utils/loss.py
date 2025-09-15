@@ -79,6 +79,32 @@ def assign_gt_to_voxels(grid, gtl, voxel_size, debug, ignore_class_id=-1):
     # XXX: center loss also is calculated for all voxels of an object
     # TODO: dropping must be corrected!
 
+class loss_bev(nn.Module):
+    def __init__(self, cfg):
+        super(loss_bev, self).__init__()
+
+
+    def forward(self, prediction, init_gtl, grid, oob_mask_valid):
+        """
+        prediction is:
+            pred[:num_class] = class probabilities,
+            pred[num_class] = objecness score,
+            pred[num_class + 1 : num_class + 3] = offsets from voxel center,
+            pred[num_class + 3 : num_class + 5] = object dimensions,
+            pred[-1] = object box yaw angle
+            *** Prediction comes like [n, out_ch, w_res, d_res]
+            
+        init_gtl is is a list (length is num_batch) where for gt in gtl[index]:
+            gt['category'] = object class (zero to num_classes-1 and -1 for not important objects)
+            gt['bbox3d'] = order is: h, w, l, cx, cy, cz, yaw
+            
+        grid is:
+            the grid with x, y, z of each voxel to match prediction with gt objects
+            
+        oob_mask_valid is:
+            shape 100, 30, 70 and where the voxel is out of boundary of image --> False otherwise, True
+        """
+
 class loss_3d(nn.Module):
     def __init__(self, cfg):
         super(loss_3d, self).__init__()
