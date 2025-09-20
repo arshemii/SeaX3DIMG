@@ -90,7 +90,7 @@ def aggregate_assignment(assignments):
     
     assignments_bev = []
     
-    for ass in len(assignments):
+    for ass in assignments:
         W, H, D = ass.shape
         bev = torch.full((W, D), -1, dtype=ass.dtype, device=ass.device)
     
