@@ -375,7 +375,7 @@ class loss_bev(nn.Module):
         """
         assert grid.shape[-1] == 3, f"Expected grid[..., 3] for (x,y,z), got shape {grid.shape}"
         assert len(prediction) == len(init_gtl), "Values are not all equal, batch size mismatch with prediction"
-        assert prediction.shape == (len(init_gtl), 10, grid.shape[0], grid.shape[1], grid.shape[2]), \
+        assert prediction.shape == (len(init_gtl), 10, grid.shape[0], grid.shape[2]), \
             f"Prediction has a wrong shape, expected shape is: [n, out_ch, w_res, h_res, d_res], received: {prediction.shape}"
         assert isinstance (init_gtl, list) == True, "initial ground truth variable is not a list!"
         if len(init_gtl) > 0:
