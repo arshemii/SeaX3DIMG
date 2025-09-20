@@ -11,12 +11,14 @@ import torch
 import os
 
 def box_generator_2d(detection):
-    # order: xmin, ymin, xmax, ymax
+    # order: xmin, ymin, xmax, ymax, yaw
     # written in this way fro more readability
     return np.array([detection[4],
                     detection[5],
                     detection[6],
-                    detection[7]])
+                    detection[7],
+                    detection[14]])
+
 
 def box_generator_3d(detection):
     # order: h, w, l, cx, cy, cz, yaw
@@ -24,6 +26,12 @@ def box_generator_3d(detection):
     return np.array([detection[8], detection[9], detection[10],
                     detection[11], detection[12], detection[13],
                     detection[14]])
+
+def box_generator_3d_to_bev(bbox_3d):
+    # order: w, l, cx, cz, yaw
+    return np.array([bbox_3d[1], bbox_3d[2],
+                     bbox_3d[3], bbox_3d[5],
+                     bbox_3d[6]])
 
 # def parse_id_file(set_path, data_dir):
 #     result = []
@@ -155,6 +163,8 @@ def parse_label(label_path, cfg):
                 'occlusion': int(det[2]),
                 'angle_observation': det[3],
                 'score': score}
+            bbox_bev = box_generator_3d_to_bev(box_generator_3d(det))
+            one_det_in_instance['bbox_bev'] = torch.from_numpy(bbox_bev)
             all_det_in_instance.append(one_det_in_instance)
             
     return all_det_in_instance
@@ -240,6 +250,7 @@ def collate_fn(batch):
             for obj in sm:
                 obj['bbox2d'] = obj['bbox2d'].to(dtype=torch.float32)
                 obj['bbox3d'] = obj['bbox3d'].to(dtype=torch.float32)
+                obj['bbox_bev'] = obj['bbox_bev'].to(dtype=torch.float32)
                 obj['category'] = obj['category'].to(dtype=torch.int64)
         batch_dict['label'] = labels
     return batch_dict
