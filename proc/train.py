@@ -45,7 +45,11 @@ class Trainer:
 
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
-        self.checkpoint_dir = self.cfg.model.sx3d.checkpoint
+        
+        if cfg.model.head == 'box3d':
+            self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_3d
+        elif cfg.model.head == 'box2d':
+            self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_bev
         self.log_dir = self.cfg.log_dir
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)

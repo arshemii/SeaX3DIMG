@@ -53,7 +53,8 @@ def config_generator():
     
     cfg.data.scale = max(cfg.data.scale_1, cfg.data.scale_0)
     
-    cfg.model.head = 'box3d'
+    # cfg.model.head = 'box3d'
+    cfg.model.head = 'box2d'
     cfg.model.back.name = 'hrnet-w48'
     cfg.model.unet_cout = 2
     cfg.model.hrnet_cout = 48
@@ -62,7 +63,8 @@ def config_generator():
     ################################
     
     cfg.model.sx3d.use_checkpoint = False
-    cfg.model.sx3d.checkpoint = './checkpoints/'
+    cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
+    cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
     ####################################
     
     cfg.data.path = './dataset/sequential/'

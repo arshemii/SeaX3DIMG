@@ -46,7 +46,7 @@ def training(cfg):
     from utils.kitti_sx3d import kitti_sx3d
     from SX3DIMG import get_SX3D_model
     from utils.grid_generator import GridGenerator
-    from utils.loss import loss_3d
+    from utils.loss import loss_3d, loss_bev
     
     device = cfg.device[0]
     
@@ -74,18 +74,33 @@ def training(cfg):
     grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32).permute(1,2,3,0)
     grid = grid.to(device)
     
-    loss_fn = loss_3d(cfg)
+    if cfg.model.head == 'box2d':
+        loss_fn = loss_bev(cfg)
+    elif cfg.model.head == 'box3d':
+        loss_fn = loss_3d(cfg)
+    else:
+        raise NotImplementedError("Only 'box2d' and 'box3d' have been implemented by now! ")
     
     if cfg.dev.eval_in_train == False:
         metric_module = None
     else:
         raise NotADirectoryError("Evaluation metric is not finished yet!")
     
-    if len(os.listdir(cfg.model.sx3d.checkpoint)) == 0:
-        resume_checkpoint = None
+    if cfg.model.head == 'box3d':
+        if len(os.listdir(cfg.model.sx3d.checkpoint_3d)) == 0:
+            resume_checkpoint = None
+        else:
+            resume_checkpoint = max(glob.glob("./checkpoints_3d/checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
+            print(f"Start training with {resume_checkpoint}")
+            
+    elif cfg.model.head == 'box2d':
+        if len(os.listdir(cfg.model.sx3d.checkpoint_bev)) == 0:
+            resume_checkpoint = None
+        else:
+            resume_checkpoint = max(glob.glob("./checkpoints_bev/checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
+            print(f"Start training with {resume_checkpoint}")
     else:
-        resume_checkpoint = max(glob.glob("./checkpoints/checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
-        print(f"Start training with {resume_checkpoint}")
+        raise NotImplementedError("Only 'box2d' and 'box3d' have been implemented by now! so, no checkpoint for other options.")
         
     
     trainer = Trainer(cfg, model, dataset, grid, collate_fn, metric_module,
