@@ -1,60 +1,80 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Sep 21 11:48:47 2025
+
+@author: arash
+"""
+from shapely.geometry import Polygon
+import numpy as np
 
 
-def iou_bev(box1, box2):
-  """
-  ------- Important: no orientation is applied -------
-  boxes are numpy arrays: x_min, y_min, x_max, y_max
-  box example: np.array([x_min, y_min, x_max, y_max])
-  """
-  x1_min, y1_min, x1_max, y1_max = box1
-  x2_min, y2_min, x2_max, y2_max = box2
+def get_corners(cx, cz, w, l, yaw):
+    """
+    Compute the (x,z) coordinates of the 4 corners of the rotated box.
+    Returns np.array of shape (4,2).
+    
+    ChatGPT generated function!
+    """
+    # half-dimensions
+    w2, l2 = w / 2.0, l / 2.0
 
-  # boundary of the intersection
-  inter_xmin = max(x1_min, x2_min)
-  inter_ymin = max(y1_min, y2_min)
-  inter_xmax = min(x1_max, x2_max)
-  inter_ymax = min(y1_max, y2_max)
+    # corners in box local frame (before rotation)
+    # order: [front-left, front-right, back-right, back-left]
+    corners = np.array([
+        [ w2,  l2],
+        [-w2,  l2],
+        [-w2, -l2],
+        [ w2, -l2]
+    ])
 
-  inter_w = max(0, inter_xmax - inter_xmin)
-  inter_h = max(0, inter_ymax - inter_ymin)
-  inter_area = inter_w * inter_h
+    # rotation matrix around yaw (z-axis rotation in BEV plane)
+    rot = np.array([
+        [np.cos(yaw), -np.sin(yaw)],
+        [np.sin(yaw),  np.cos(yaw)]
+    ])
 
-  # Areas
-  area1 = (x1_max - x1_min) * (y1_max - y1_min)
-  area2 = (x2_max - x2_min) * (y2_max - y2_min)
+    # rotate + translate
+    rotated = corners @ rot.T
+    rotated[:, 0] += cx
+    rotated[:, 1] += cz
 
-  union_area = area1 + area2 - inter_area
+    return rotated
 
-  return inter_area / union_area if union_area > 0 else 0.0
+def bev_iou(box1, box2):
+    """
+    Compute the IoU of two oriented 2D bounding boxes in BEV (x-z plane).
+
+    Args:
+        box1: list [cx, cz, w, l, yaw]
+              cx, cz = box center coordinates
+              w, l   = width (x-axis extent), length (z-axis extent)
+              yaw    = rotation angle in radians (counter-clockwise, from x-axis)
+        box2: same format as box1
+
+    Returns:
+        iou: float, intersection over union (0..1)
+    
+    ChatGPT generated function!
+    """
+
+    # convert both boxes to polygons
+    poly1 = Polygon(get_corners(*box1))
+    poly2 = Polygon(get_corners(*box2))
+
+    if not poly1.is_valid or not poly2.is_valid:
+        return 0.0
+
+    # intersection & union
+    inter = poly1.intersection(poly2).area
+    union = poly1.area + poly2.area - inter
+
+    if union <= 0:
+        return 0.0
+
+    return inter / union
 
 
-def iou_3d(box1, box2):
-  """
-  ------- Important: no orientation is applied -------
-  boxes are numpy arrays: x_min, y_min, z_min, x_max, y_max, z_max
-  box example: np.array([x_min, y_min, z_min, x_max, y_max, z_max])
-  """
-  x1_min, y1_min, z1_min, x1_max, y1_max, z1_max = box1
-  x2_min, y2_min, z2_min, x2_max, y2_max, z2_max = box2
+# TODO: add to configuration all new params from here
 
-  # boundary of the intersection
-  inter_xmin = max(x1_min, x2_min)
-  inter_ymin = max(y1_min, y2_min)
-  inter_zmin = max(z1_min, z2_min)
-  inter_xmax = min(x1_max, x2_max)
-  inter_ymax = min(y1_max, y2_max)
-  inter_zmax = min(z1_max, z2_max)
-
-  inter_w = max(0, inter_xmax - inter_xmin)
-  inter_l = max(0, inter_ymax - inter_ymin)
-  inter_h = max(0, inter_zmax - inter_zmin)
-  inter_vol = inter_w * inter_l * inter_h
-
-  vol1 = (x1_max - x1_min) * (y1_max - y1_min) * (z1_max - z1_min)
-  vol2 = (x2_max - x2_min) * (y2_max - y2_min) * (z2_max - z2_min)
-
-  union_vol = vol1 + vol2 - inter_vol
-
-  return inter_vol / union_vol if union_vol > 0 else 0.0
-
-
+def drop_lq_preds(prediction, objectness_score):
