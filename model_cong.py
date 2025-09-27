@@ -158,9 +158,8 @@ def config_generator():
     cfg.num_epochs = 100
 
     cfg.eval.save_dir = './eval_dir/'
-    cfg.eval.iou_threshold = 0.45
-    cfg.eval.score_threshold = 0.55
     cfg.eval.iou_list = [0.10, 0.25, 0.50, 0.75, 0.90]
+    cfg.eval.objectness_threshold = 0.5
     
     return cfg
 
