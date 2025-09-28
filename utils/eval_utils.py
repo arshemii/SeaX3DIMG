@@ -18,68 +18,58 @@ def grid3d_to_grid2d(grid):
 
 def get_corners(cx, cz, w, l, yaw):
     """
-    Compute the (x,z) coordinates of the 4 corners of the rotated box.
-    Returns np.array of shape (4,2).
-    
-    ChatGPT generated function!
+    Compute corners of a single box in BEV (numpy).
     """
-    # half-dimensions
     w2, l2 = w / 2.0, l / 2.0
-
-    # corners in box local frame (before rotation)
-    # order: [front-left, front-right, back-right, back-left]
     corners = np.array([
         [ w2,  l2],
         [-w2,  l2],
         [-w2, -l2],
         [ w2, -l2]
     ])
-
-    # rotation matrix around yaw (z-axis rotation in BEV plane)
     rot = np.array([
         [np.cos(yaw), -np.sin(yaw)],
         [np.sin(yaw),  np.cos(yaw)]
     ])
-
-    # rotate + translate
     rotated = corners @ rot.T
     rotated[:, 0] += cx
     rotated[:, 1] += cz
-
     return rotated
 
-def bev_iou(box1, box2):
+def bev_iou(dets: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
     """
-    Compute the IoU of two oriented 2D bounding boxes in BEV (x-z plane).
+    Compute IoU between N detections and 1 gt box in BEV.
 
     Args:
-        box1: list [cx, cz, w, l, yaw]
-              cx, cz = box center coordinates
-              w, l   = width (x-axis extent), length (z-axis extent)
-              yaw    = rotation angle in radians (counter-clockwise, from x-axis)
-        box2: same format as box1
-
-    Returns:
-        iou: float, intersection over union (0..1)
+        dets: Tensor [N, 5] -> cx, cz, w, l, yaw
+        gt:   Tensor [5]    -> cx, cz, w, l, yaw
     
-    ChatGPT generated function!
+    Returns:
+        Tensor [N] of IoUs
     """
+    dets_np = dets.cpu().numpy()
+    gt_np = gt.cpu().numpy()
 
-    # convert both boxes to polygons
-    poly1 = Polygon(get_corners(*box1))
-    poly2 = Polygon(get_corners(*box2))
+    # Convert GT to polygon
+    poly_gt = Polygon(get_corners(*gt_np))
+    if not poly_gt.is_valid:
+        return torch.zeros(dets.shape[0], device=dets.device)
 
-    if not poly1.is_valid or not poly2.is_valid:
-        return 0.0
+    ious = []
+    for det in dets_np:
+        poly_det = Polygon(get_corners(*det))
+        if not poly_det.is_valid:
+            ious.append(0.0)
+            continue
 
-    # intersection & union
-    inter = poly1.intersection(poly2).area
-    union = poly1.area + poly2.area - inter
+        inter = poly_det.intersection(poly_gt).area
+        union = poly_det.area + poly_gt.area - inter
+        if union <= 0:
+            ious.append(0.0)
+        else:
+            ious.append(inter / union)
 
-    if union <= 0:
-        return 0.0
-
-    return inter / union
+    return torch.tensor(ious, device=dets.device, dtype=torch.float32)
 
 
 
@@ -167,3 +157,57 @@ def filter_detections(tensor, obj_thresh=0.5):
         results.append(dets)  # [N, 8]
 
     return results
+
+def drop_far_dets(dets_list, Z_threshold):
+    """
+    Drop detections whose z-center is larger than Z_threshold.
+
+    Args:
+        dets_list: list of length B, each element is [N, 8] tensor of detections
+        Z_threshold: float, max allowed z coordinate
+
+    Returns:
+        new_dets_list: list of length B, each element is [M, 8] tensor (M <= N)
+    """
+    new_dets_list = []
+    for dets in dets_list:
+        if dets.numel() == 0:  
+            # No detections for this batch element
+            new_dets_list.append(dets)  
+            continue
+
+        # Keep only where z <= Z_threshold
+        mask = dets[:, 4] <= Z_threshold
+        filtered = dets[mask]
+
+        new_dets_list.append(filtered)
+
+    return new_dets_list
+
+def drop_far_gts(gt_labels, Z_threshold):
+    """
+    Filter GT labels by Z threshold, and keep only bbox_bev and category.
+
+    Args:
+        gt_labels: list of length B
+            Each element is a list of dicts with keys:
+                'category', 'bbox3d', 'bbox_bev'
+        Z_threshold: float, max allowed cz (forward distance)
+
+    Returns:
+        filtered_gt: list of length B
+            Each element is a list of dicts with keys:
+                'category', 'bbox_bev'
+    """
+    filtered_gt = []
+    for batch_gts in gt_labels:
+        batch_result = []
+        for gt in batch_gts:
+            cz = gt['bbox_bev'][3]  # bbox_bev = [w, l, cx, cz, yaw]
+            if cz <= Z_threshold:
+                batch_result.append({
+                    'category': gt['category'],
+                    'bbox_bev': gt['bbox_bev']
+                })
+        filtered_gt.append(batch_result)
+    return filtered_gt

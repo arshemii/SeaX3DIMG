@@ -31,7 +31,7 @@ def config_generator():
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
     
-    cfg.num_batch = 1
+    cfg.num_batch = 4
     cfg.num_worker = 0
     
     cfg.log_dir = './logging_dir'
@@ -160,6 +160,9 @@ def config_generator():
     cfg.eval.save_dir = './eval_dir/'
     cfg.eval.iou_list = [0.10, 0.25, 0.50, 0.75, 0.90]
     cfg.eval.objectness_threshold = 0.5
+    cfg.eval.range_limit = None
+    cfg.eval.is_class_cost = False
+    cfg.eval.match_cost_dist = [0.85, 0.15]
     
     return cfg
 
