@@ -160,9 +160,8 @@ def config_generator():
     cfg.eval.save_dir = './eval_dir/'
     cfg.eval.iou_list = [0.10, 0.25, 0.50, 0.75, 0.90]
     cfg.eval.objectness_threshold = 0.5
-    cfg.eval.range_limit = None
-    cfg.eval.is_class_cost = False
-    cfg.eval.match_cost_dist = [0.85, 0.15]
+    cfg.eval.range_limit = False  # can add a number in float
+    cfg.eval.eval_device = torch.device("cpu")
     
     return cfg
 

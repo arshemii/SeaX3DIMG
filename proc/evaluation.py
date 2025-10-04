@@ -15,10 +15,10 @@ class Evaluate:
         super(Evaluate, self).__init__()
         """
         prediction is a list of all batches:
-            each element is a torch.tensor on CPU with (num_batch, 10, res_w, res_z)
+            each element is a torch.tensor on CPU with (batch_size, 10, res_w, res_z)
         
-        gt_all is a list where each element is calles gt:
-            gt is is a list (length is num_batch) where for each gt in gt[index]:
+        gt_all is a list (lenghth of number of batches) where each element is called gt:
+            gt is is a list (length is batch size) where for each gt in gt[index]:
                 gt['category'] = object class (zero to num_classes-1 and -1 for not important objects)
                 gt['bbox3d'] = order is: h, w, l, cx, cy, cz, yaw
                 and mut be present:
@@ -80,12 +80,13 @@ class Evaluate:
         IoUs = torch.zeros(len(prediction), len(gt_list), dtype=dtype, device = device)
         
         # class mismatch cost
-        class_cost = torch.zeros(len(prediction), len(gt_list), device = prediction.device())
+        class_cost = torch.zeros(len(prediction), len(gt_list), dtype=dtype, device = device)
         
         for m in range(len(gt_list)):
             bbox_bev_gt = torch.tensor(gt_list[m]['bbox_bev'], dtype=dtype, device=device) # tensor w, l, cx, cz, yaw
             bbox_bev_gt = bbox_bev_gt[[2, 3, 0, 1, 4]] # cx, cz, w, l, yaw
             
+            # TODO: unit test in bev_iou
             IoUs[:, m] = eu.bev_iou(prediction[:, 3:8], bbox_bev_gt)
             
             if self.cfg.eval.is_class_cost:
@@ -121,7 +122,7 @@ class Evaluate:
 
     def eval_loop(self):
         
-        assert len(self.gt_all) == len(self.prediction)
+        assert len(self.gt_all) == len(self.prediction), "Numbe rof batches is different in preiction and gt label!"
         
         num_total_obj = 0
         

@@ -10,7 +10,7 @@ from shapely.geometry import Polygon
 import numpy as np
 
 
-def grid3d_to_grid2d(grid):
+def grid3d_to_grid2d(grid):    
     bev_grid = grid[:, 0, :, :][:, :, [0, 2]]
     # bev_grid will be 100, 70, 2
     return bev_grid
@@ -81,7 +81,7 @@ def compress_tensor(tensor):
     ChatGPT generated function
     """
     B, C, W, D = tensor.shape
-    assert C == 10, "Input tensor must have 10 channels"
+    assert C == 10, "Input tensor must have 10 channels, same as the model output"
 
     # Objectness
     objectness = tensor[:, 0:1, :, :]  # [B,1,W,D]
