@@ -169,10 +169,11 @@ class Evaluate:
             precision, recall, (optional arrays) - we return AP only here to keep it concise
         """
         if len(detections) == 0:
+            # Wrongly no detection means AP == 0
             return 0.0
 
-        # total number of GTs of this class across all images
-        npos = sum(len(v) for v in gt_by_image.values())
+        # How many times class C is present in an object over all samples
+        n_gt_c = sum(len(v) for v in gt_by_image.values())
 
         # sort detections by score descending
         detections_sorted = sorted(detections, key=lambda x: x['score'], reverse=True)
@@ -180,7 +181,7 @@ class Evaluate:
         tp = np.zeros(len(detections_sorted), dtype=np.float32)
         fp = np.zeros(len(detections_sorted), dtype=np.float32)
 
-        # For each image, keep a matched flag list for its GTs
+        # to check if a gt object is matched with a higher score preds:
         matched_gt_flags = {img: np.zeros(len(gt_by_image.get(img, [])), dtype=bool) for img in gt_by_image.keys()}
 
         for i, det in enumerate(detections_sorted):
@@ -189,12 +190,11 @@ class Evaluate:
             gt_list = gt_by_image.get(img, [])
 
             if len(gt_list) == 0:
-                # no GT of this class in this image -> false positive
+                # no GT of this class in this image -> FP
                 fp[i] = 1.0
                 continue
 
             # compute IoU of this detection with all GTs in this image
-            # use eu.bev_iou repeatedly (small lists)
             ious = []
             for gt_idx, gt_bbox in enumerate(gt_list):
                 gt_t = torch.tensor(gt_bbox, dtype=torch.float32)
@@ -208,27 +208,27 @@ class Evaluate:
 
             if best_iou >= iou_th:
                 if not matched_gt_flags[img][best_idx]:
-                    # true positive: mark this gt matched
+                    # TP: mark this gt matched
                     tp[i] = 1.0
                     matched_gt_flags[img][best_idx] = True
                 else:
-                    # this gt already matched -> duplicate detection => false positive
+                    # this gt already matched -> duplicate detection => FP
                     fp[i] = 1.0
             else:
-                # IoU too low -> false positive
+                # FL
                 fp[i] = 1.0
 
         # cumulative sums
         fp_cum = np.cumsum(fp)
         tp_cum = np.cumsum(tp)
 
-        if npos == 0:
+        if n_gt_c == 0:
             recall = tp_cum * 0.0
         else:
-            recall = tp_cum / float(npos)
+            recall = tp_cum / float(n_gt_c)
         precision = tp_cum / (tp_cum + fp_cum + 1e-9)
 
-        # AP computation (interpolated precision)
+        # AP - interpolated precision
         # make precision monotonically decreasing
         mpre = np.concatenate(([0.0], precision, [0.0]))
         mrec = np.concatenate(([0.0], recall, [1.0]))
@@ -237,11 +237,9 @@ class Evaluate:
         # integrate area under curve
         idx = np.where(mrec[1:] != mrec[:-1])[0]
         ap = np.sum((mrec[idx + 1] - mrec[idx]) * mpre[idx + 1])
-        return float(ap)
+        return float(ap), recall, precision
 
-    # -------------------------
-    # Main evaluation entry
-    # -------------------------
+
     def evaluate(self):
         """
         Return:
@@ -278,7 +276,13 @@ class Evaluate:
                     # Count matches per class (TP)
                     for p_idx, g_idx in matches:
                         gt_cls = int(gts[g_idx]['category'])
-                        metrics_per_iou[iou_th]['per_class_counts'][gt_cls]['TP'] += 1
+                        pred_cls = int(preds[p_idx, 1].item())
+                        if pred_cls == gt_cls:
+                            metrics_per_iou[iou_th]['per_class_counts'][gt_cls]['TP'] += 1
+                        else:
+                            # Wrong class → penalize both preds and GT
+                            metrics_per_iou[iou_th]['per_class_counts'][pred_cls]['FP'] += 1
+                            metrics_per_iou[iou_th]['per_class_counts'][gt_cls]['FN'] += 1
 
                     # Unmatched preds -> FP per predicted class
                     for p_idx in unmatched_pred_idx:
@@ -291,8 +295,6 @@ class Evaluate:
                         metrics_per_iou[iou_th]['per_class_counts'][gt_cls]['FN'] += 1
 
                 # Collect detections and GTs (for AP computation) across IoUs (AP computed per IoU later)
-                # detection entries: image_id, score, bbox (cx,cz,w,l,yaw), class
-                # compute score = objectness * class_prob
                 if preds.numel() > 0:
                     scores = (preds[:, 0] * preds[:, 2]).cpu().numpy()  # objectness * class_prob
                     boxes = preds[:, 3:8].cpu().numpy()  # cx, cz, w, l, yaw
@@ -303,10 +305,8 @@ class Evaluate:
                         for iou_th in iou_list:
                             metrics_per_iou[iou_th]['detections_by_class'][c].append(entry)
 
-                # collect GTs per class for this image
                 for g_idx, gt in enumerate(gts):
                     c = int(gt['category'])
-                    # reorder GT to cx,cz,w,l,yaw
                     bbox_bev = gt['bbox_bev']
                     bbox_reordered = [bbox_bev[2], bbox_bev[3], bbox_bev[0], bbox_bev[1], bbox_bev[4]]
                     for iou_th in iou_list:
@@ -314,7 +314,7 @@ class Evaluate:
 
                 global_image_id += 1
 
-        # After scanning all images, compute AP per class per IoU threshold
+        # AP per class per IoU threshold
         results = {}
         for iou_th in iou_list:
             per_class_results = {}
@@ -322,8 +322,8 @@ class Evaluate:
             for c in class_ids:
                 counts = metrics_per_iou[iou_th]['per_class_counts'][c]
                 TP = counts['TP']; FP = counts['FP']; FN = counts['FN']
-                prec = TP / (TP + FP + 1e-9) if (TP + FP) > 0 else 0.0
-                rec = TP / (TP + FN + 1e-9) if (TP + FN) > 0 else 0.0
+                prec = TP / (TP + FP) if (TP + FP) > 0 else 0.0
+                rec = TP / (TP + FN) if (TP + FN) > 0 else 0.0
 
                 # compute AP using all detections of this class across dataset
                 dets_for_class = metrics_per_iou[iou_th]['detections_by_class'][c]
@@ -343,4 +343,4 @@ class Evaluate:
                 'per_class': per_class_results,
                 'mAP': mAP
             }
-        return results
+        return results, metrics_per_iou

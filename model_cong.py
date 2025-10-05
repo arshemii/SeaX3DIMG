@@ -162,6 +162,10 @@ def config_generator():
     cfg.eval.objectness_threshold = 0.5
     cfg.eval.range_limit = False  # can add a number in float
     cfg.eval.eval_device = torch.device("cpu")
+    cfg.eval.cl0 = "Car, Van"
+    cfg.eval.cl1 = "Truck"
+    cfg.eval.cl2 = "Pedestrian"
+    cfg.eval.cl3 = "Cyclist"
     
     return cfg
 
