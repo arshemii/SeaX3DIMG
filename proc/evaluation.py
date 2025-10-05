@@ -358,13 +358,13 @@ class Evaluate:
 def evaluate_model(model, dataset, collate_fn, grid, cfg):
     
     device_p = cfg.device[0] # prediction device
-    device_e = cfg.eval.device[0] # evaluation device
+    device_e = cfg.eval.eval_device[0] # evaluation device
     
     predictions = []
     gt_all = []
     
     dataloader = DataLoader(dataset, batch_size=cfg.num_batch, shuffle=True,
-                                 collate_fn=collate_fn, num_workers=cfg.num_workers)
+                                 collate_fn=collate_fn, num_workers=cfg.num_worker)
     
     pbar_p = tqdm(enumerate(dataloader), total=len(dataloader), desc="Prediction on dataset:")
     for batch_idx, batch in pbar_p:

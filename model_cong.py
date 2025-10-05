@@ -31,7 +31,7 @@ def config_generator():
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
     
-    cfg.num_batch = 4
+    cfg.num_batch = 1
     cfg.num_worker = 0
     
     cfg.log_dir = './logging_dir'
@@ -162,7 +162,7 @@ def config_generator():
     cfg.eval.objectness_threshold = 0.5
     cfg.eval.range_limit = True  # can add a number in float
     cfg.eval.range = 50.0
-    cfg.eval.eval_device = [torch.device("cpu")]
+    cfg.eval.eval_device = [torch.device('cpu')]
     cfg.eval.cl0 = "Car, Van"
     cfg.eval.cl1 = "Truck"
     cfg.eval.cl2 = "Pedestrian"

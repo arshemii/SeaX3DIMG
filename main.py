@@ -125,6 +125,7 @@ def evaluation(cfg):
         key=lambda x: int(re.search(r"checkpoint_epoch_(\d+).pth", x).group(1)))
     
     model = get_SX3D_model(cfg)
+    model = model.to(cfg.device[0]) 
     checkpoint = torch.load(latest_ckpt, map_location = cfg.device[0])
     model.load_state_dict(checkpoint['model_state'])
     model.eval()
