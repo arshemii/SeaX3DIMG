@@ -85,7 +85,7 @@ class Trainer:
             for sample in batch["label"]:
                 for label in sample:
                     label['category'] = label['category'].to(self.device)
-                    # label['bbox2d'] = label['bbox2d'].to(self.device)
+                    label['bbox_bev'] = label['bbox_bev'].to(self.device)
                     label['bbox3d'] = label['bbox3d'].to(self.device)
 
             

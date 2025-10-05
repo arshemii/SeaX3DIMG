@@ -109,7 +109,23 @@ def training(cfg):
     trainer.train()
     
 def evaluation(cfg):
-    raise NotADirectoryError("Evaluation function is not finished yet!")
+    from utils.data_utils import collate_fn
+    from utils.kitti_sx3d import kitti_sx3d
+    from SX3DIMG import get_SX3D_model
+    from utils.grid_generator import GridGenerator
+    
+    
+    device = cfg.device[0]
+    
+    dataset = kitti_sx3d(cfg)
+    
+    model = get_SX3D_model(cfg)
+    model.to(device)
+    model.train()
+    
+    
+    
+    
 
 def test(cfg):
     raise NotADirectoryError("Test function is not finished yet!")
