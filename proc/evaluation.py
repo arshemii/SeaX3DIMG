@@ -81,7 +81,7 @@ class Evaluate:
 
         # optionally drop far detections
         if self.cfg.eval.range_limit:
-            preds_list = eu.drop_far_dets(preds_list, self.cfg.eval.range_limit)
+            preds_list = eu.drop_far_dets(preds_list, self.cfg.eval.range)
 
         return preds_list
 
@@ -93,7 +93,7 @@ class Evaluate:
             prepared_gt: same shape, but optionally filtered by range_limit
         """
         if self.cfg.eval.range_limit:
-            return eu.drop_far_gts(batch_gt, self.cfg.eval.range_limit)
+            return eu.drop_far_gts(batch_gt, self.cfg.eval.range)
         return batch_gt
 
 
@@ -262,7 +262,10 @@ class Evaluate:
 
         assert len(self.prediction_batches) == len(self.gt_all_batches), "prediction and gt batch count mismatch"
         
-        for batch_idx, (batch_preds, batch_gts) in enumerate(zip(self.prediction_batches, self.gt_all_batches)):
+        for batch_idx, (batch_preds, batch_gts) in tqdm(
+            enumerate(zip(self.prediction_batches, self.gt_all_batches)),
+            total=len(self.prediction_batches), desc="Collectinbg statistics:"):
+            
             # prepare batch-level preds and gts
             prepared_preds_list = self._pred_preparation(batch_preds)  # list length B of [N,8] tensors
             prepared_gt_list = self._gt_preparation(batch_gts)  # list length B of lists of gt dicts
@@ -318,6 +321,8 @@ class Evaluate:
 
                 global_image_id += 1
 
+        print("-------------------Start evaluation---------------------")    
+
         # AP per class per IoU threshold
         results = {}
         for iou_th in iou_list:
@@ -347,7 +352,7 @@ class Evaluate:
                 'per_class': per_class_results,
                 'mAP': mAP
             }
-        return results, metrics_per_iou
+        return results
 
 
 def evaluate_model(model, dataset, collate_fn, grid, cfg):
@@ -361,8 +366,8 @@ def evaluate_model(model, dataset, collate_fn, grid, cfg):
     dataloader = DataLoader(dataset, batch_size=cfg.num_batch, shuffle=True,
                                  collate_fn=collate_fn, num_workers=cfg.num_workers)
     
-    pbar = tqdm(enumerate(dataloader), total=len(dataloader))
-    for batch_idx, batch in pbar:
+    pbar_p = tqdm(enumerate(dataloader), total=len(dataloader), desc="Prediction on dataset:")
+    for batch_idx, batch in pbar_p:
         
         batch["left_img"] = batch["left_img"].to(device_p)
         batch["left_img_previous"] = batch["left_img_previous"].to(device_p)
@@ -385,6 +390,10 @@ def evaluate_model(model, dataset, collate_fn, grid, cfg):
         grid = grid.permute(3, 0, 1, 2)
     
     evaluator = Evaluate(cfg, predictions, gt_all, grid)
+    results = evaluator.evaluate()
+    
+    return results
+    
         
     
     
