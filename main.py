@@ -144,7 +144,7 @@ def evaluation(cfg):
         print("--------------------------------------------------------")
         for c, stats in res['per_class'].items():
             print(f"{c:5d} | {stats['TP']:3d} {stats['FP']:3d} {stats['FN']:3d} "
-                  f"| {stats['precision']:.3f}    | {stats['recall']:.3f} | {stats['AP']:.3f}")
+                  f"| {stats['precision']:.3f}    | {stats['recall']:.3f} | {stats['AP']:.5f}")
         print("--------------------------------------------------------")
         print(f"mAP@{iou_th:.2f} = {res['mAP']:.3f}")
     print("=========================================================")

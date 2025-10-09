@@ -35,6 +35,7 @@ class SX3DIMG(nn.Module):
         # TODO: removed to device from grid (following line)
         self.grid = self.grid
         self.grid_resolution = tuple(int(round(size / res)) for size, res in zip(self.cfg.grid_size, self.cfg.grid_unc))
+        self.num_voxels = self.grid_resolution[0] * self.grid_resolution[1] * self.grid_resolution[2]
         
         
         if self.cfg.camera.P_l is not None:
@@ -128,7 +129,7 @@ class SX3DIMG(nn.Module):
         # recunstruct 3d feature map
         # voxel of shape torch.Size([1, 256, num_valid_points, 1])
         # Prepare empty tensor
-        full_voxel = torch.zeros((1, 256, 100 * 30 * 70), dtype=voxel.dtype, device=voxel.device)
+        full_voxel = torch.zeros((1, 256, self.num_voxels), dtype=voxel.dtype, device=voxel.device)
         
         # Remove batch and last dim → shape: [256, num_valid_points]
         voxel_squeezed = voxel.squeeze(0).squeeze(-1)
