@@ -98,7 +98,7 @@ class head_box_2d_bev(nn.Module):
         
         x_merge = torch.cat([x1, x2], dim=3)
         
-        x_merge = torch.mean(x_merge, dim = 3, keepdim=False).values
+        x_merge = torch.max(x_merge, dim = 3, keepdim=False).values
         
         out = self.conv2d_merge(x_merge)
         # TODO: what is this output shape? what will be the grid???
