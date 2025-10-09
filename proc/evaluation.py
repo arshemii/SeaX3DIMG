@@ -366,36 +366,37 @@ def evaluate_model(model, dataset, collate_fn, grid, cfg, debug = False):
     dataloader = DataLoader(dataset, batch_size=cfg.num_batch, shuffle=True,
                                  collate_fn=collate_fn, num_workers=cfg.num_worker)
     
-    if debug:
-        early_stop = int(len(dataloader)/20)
-        iddx = early_stop
-    else:
-        iddx = int(len(dataloader))
+    len_dl = len(dataloader)
     
-    pbar_p = tqdm(enumerate(dataloader), total=len(dataloader), desc=f"Prediction on dataset (stop at {iddx}):")
+    iddx = len_dl // 20 if debug else len_dl
+    
+    pbar_p = tqdm(enumerate(dataloader), total = len_dl, desc=f"Prediction on dataset (stop at {iddx}):")
     for batch_idx, batch in pbar_p:
-        
+    
         if debug:
-            if batch_idx == early_stop:
+            if batch_idx >= iddx:
                 break
-        
-        batch["left_img"] = batch["left_img"].to(device_p)
-        batch["left_img_previous"] = batch["left_img_previous"].to(device_p)
-        batch["right_img"] = batch["right_img"].to(device_p)
-        
-        for sample in batch["label"]:
-            for label in sample:
-                label['category'] = label['category'].to(device_e)
-                label['bbox_bev'] = label['bbox_bev'].to(device_e)
-        
-        gt_all.append(batch["label"])
-        
+            
         with torch.no_grad():
+            batch["left_img"] = batch["left_img"].to(device_p)
+            batch["left_img_previous"] = batch["left_img_previous"].to(device_p)
+            batch["right_img"] = batch["right_img"].to(device_p)
+            
+            for sample in batch["label"]:
+                for label in sample:
+                    label['category'] = label['category'].to(device_e)
+                    label['bbox_bev'] = label['bbox_bev'].to(device_e)
+                    
+            gt_all.append(batch["label"])
+            
             temporal_l = model.create_memory(batch["left_img_previous"])
             outputs = model(batch["left_img"], batch["right_img"], temporal_l)[0]
-            
+            outputs = outputs.detach().cpu()
             predictions.append(outputs)
             
+        del batch["left_img"], batch["left_img_previous"], batch["right_img"], temporal_l
+        torch.cuda.empty_cache()
+      
     if grid.shape[-1] == 3:
         grid = grid.permute(3, 0, 1, 2)
     
