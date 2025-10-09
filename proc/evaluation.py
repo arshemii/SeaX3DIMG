@@ -92,9 +92,18 @@ class Evaluate:
         Output:
             prepared_gt: same shape, but optionally filtered by range_limit
         """
+        # remove gt with label -1
+        new_batch_gt = []
+        for sp in batch_gt:
+            new_sp = []
+            for gt in sp:
+                if int(gt['category']) != -1:
+                    new_sp.append(gt)
+            new_batch_gt.append(new_sp)
+        
         if self.cfg.eval.range_limit:
-            return eu.drop_far_gts(batch_gt, self.cfg.eval.range)
-        return batch_gt
+            return eu.drop_far_gts(new_batch_gt, self.cfg.eval.range)
+        return new_batch_gt
 
 
     def hungarian_matching(self, preds: torch.Tensor, gt_list: list, iou_threshold: float):
@@ -368,7 +377,7 @@ def evaluate_model(model, dataset, collate_fn, grid, cfg, debug = False):
     
     len_dl = len(dataloader)
     
-    iddx = len_dl // 20 if debug else len_dl
+    iddx = len_dl // 40 if debug else len_dl
     
     pbar_p = tqdm(enumerate(dataloader), total = len_dl, desc=f"Prediction on dataset (stop at {iddx}):")
     for batch_idx, batch in pbar_p:
