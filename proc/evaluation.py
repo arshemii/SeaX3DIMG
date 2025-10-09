@@ -396,9 +396,7 @@ def evaluate_model(model, dataset, collate_fn, grid, cfg, debug = False):
             
         del batch["left_img"], batch["left_img_previous"], batch["right_img"], temporal_l
         torch.cuda.empty_cache()
-      
-    if grid.shape[-1] == 3:
-        grid = grid.permute(3, 0, 1, 2)
+
     
     evaluator = Evaluate(cfg, predictions, gt_all, grid)
     results = evaluator.evaluate()

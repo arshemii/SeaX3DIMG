@@ -117,7 +117,7 @@ def add_voxel_centers(pred_tensor, grid):
     """
     B, C, W, D = pred_tensor.shape
     assert C == 8, "Expected pred_tensor with 8 channels"
-    assert grid.shape == torch.Size([W, D, 2]), f"Grid must be [{W}, {D}, 2]"
+    assert grid.shape == torch.Size([W, D, 2]), f"Grid must be [{W}, {D}, 2], but received {grid.shape}"
 
     pred = pred_tensor.clone()
 
