@@ -355,7 +355,7 @@ class Evaluate:
         return results
 
 
-def evaluate_model(model, dataset, collate_fn, grid, cfg):
+def evaluate_model(model, dataset, collate_fn, grid, cfg, debug = False):
     
     device_p = cfg.device[0] # prediction device
     device_e = cfg.eval.eval_device[0] # evaluation device
@@ -366,8 +366,18 @@ def evaluate_model(model, dataset, collate_fn, grid, cfg):
     dataloader = DataLoader(dataset, batch_size=cfg.num_batch, shuffle=True,
                                  collate_fn=collate_fn, num_workers=cfg.num_worker)
     
-    pbar_p = tqdm(enumerate(dataloader), total=len(dataloader), desc="Prediction on dataset:")
+    if debug:
+        early_stop = int(len(dataloader)/20)
+        iddx = early_stop
+    else:
+        iddx = int(len(dataloader))
+    
+    pbar_p = tqdm(enumerate(dataloader), total=len(dataloader), desc=f"Prediction on dataset (stop at {iddx}):")
     for batch_idx, batch in pbar_p:
+        
+        if debug:
+            if batch_idx == early_stop:
+                break
         
         batch["left_img"] = batch["left_img"].to(device_p)
         batch["left_img_previous"] = batch["left_img_previous"].to(device_p)

@@ -134,7 +134,7 @@ def evaluation(cfg):
     grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc) # points in cam coordinates
     grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32).permute(1,2,3,0)
     
-    results = evaluate_model(model, dataset, collate_fn, grid, cfg)
+    results = evaluate_model(model, dataset, collate_fn, grid, cfg, debug = True)
     
     eval_range = cfg.eval.range if cfg.eval.range_limit else 90.0
     
