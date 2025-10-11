@@ -155,7 +155,6 @@ def config_generator():
     cfg.loss.gamma = 2.0
     cfg.loss.beta = 1.0
     
-    cfg.num_epochs = 100
 
     cfg.eval.save_dir = './eval_dir/'
     cfg.eval.iou_list = [0.10, 0.25, 0.50, 0.75, 0.90]

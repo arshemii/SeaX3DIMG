@@ -36,7 +36,7 @@ class Trainer:
         self.dataset = dataset
         self.collate_fn = collate_fn
         self.metric_module = metric_module
-        self.num_epochs = self.cfg.num_epochs
+        self.num_epochs = self.cfg.dev.num_epochs
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.grid = grid
