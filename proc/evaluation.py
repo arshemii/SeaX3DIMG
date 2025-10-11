@@ -297,6 +297,7 @@ class Evaluate:
                             metrics_per_iou[iou_th]['per_class_counts'][gt_cls]['TP'] += 1
                         else:
                             # Wrong class → penalize both preds and GT
+                            # TODO: what is a common practice here? which to penalize?
                             metrics_per_iou[iou_th]['per_class_counts'][pred_cls]['FP'] += 1
                             metrics_per_iou[iou_th]['per_class_counts'][gt_cls]['FN'] += 1
 
