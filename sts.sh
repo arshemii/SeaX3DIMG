@@ -25,16 +25,16 @@ else
 fi
 
 # Step 3: Pull before push (merge if needed)
-echo "📥 Pulling latest from origin/ImgOnly..."
+echo "📥 Pulling latest from origin/ImgOnly_LT..."
 git pull origin "$branch" --rebase
 
 # Step 4: Push changes
 echo "🚀 Pushing to GitHub..."
-git push origin "ImgOnly"
+git push origin "ImgOnly_LT"
 
 # Step 5: Show latest commit
 echo "📜 Latest commit log:"
 git log -1 --oneline
 
-echo "✅ All done on branch 'ImgOnly'!"
+echo "✅ All done on branch 'ImgOnly_LT'!"
 
