@@ -46,7 +46,7 @@ def training(cfg):
     from utils.kitti_sx3d import kitti_sx3d
     from SX3DIMG import get_SX3D_model
     from utils.grid_generator import GridGenerator
-    from utils.loss import loss_3d, loss_bev
+    from utils.loss import loss_bev
     
     device = cfg.device[0]
     
@@ -54,6 +54,7 @@ def training(cfg):
     
     model = get_SX3D_model(cfg)
     model.to(device)
+    oob_mask_valid = model.return_boundary_mask()
     model.train()
     
     optimizer = torch.optim.AdamW(model.parameters(),
@@ -70,40 +71,23 @@ def training(cfg):
         raise NotImplementedError("No other scheduler is implemented!")
         
     
-    grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc) # points in cam coordinates
+    grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc, cfg.H_off) # points in cam coordinates
     grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32).permute(1,2,3,0)
     grid = grid.to(device)
-    
-    if cfg.model.head == 'box2d':
-        loss_fn = loss_bev(cfg)
-    elif cfg.model.head == 'box3d':
-        loss_fn = loss_3d(cfg)
-    else:
-        raise NotImplementedError("Only 'box2d' and 'box3d' have been implemented by now! ")
-    
-    if cfg.dev.eval_in_train == False:
-        metric_module = None
-    else:
-        raise NotADirectoryError("Evaluation metric is not finished yet!")
-    
-    if cfg.model.head == 'box3d':
-        if len(os.listdir(cfg.model.sx3d.checkpoint_3d)) == 0:
-            resume_checkpoint = None
-        else:
-            resume_checkpoint = max(glob.glob("./checkpoints_3d/checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
-            print(f"Start training with {resume_checkpoint}")
+
+    loss_fn = loss_bev(cfg, grid, oob_mask_valid)
             
-    elif cfg.model.head == 'box2d':
+    if cfg.model.head == 'box2d':
         if len(os.listdir(cfg.model.sx3d.checkpoint_bev)) == 0:
             resume_checkpoint = None
         else:
             resume_checkpoint = max(glob.glob("./checkpoints_bev/checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
             print(f"Start training with {resume_checkpoint}")
     else:
-        raise NotImplementedError("Only 'box2d' and 'box3d' have been implemented by now! so, no checkpoint for other options.")
+        raise NotImplementedError("Only 'box2d' is predicted in this branch.")
         
     
-    trainer = Trainer(cfg, model, dataset, grid, collate_fn, metric_module,
+    trainer = Trainer(cfg, model, dataset, collate_fn,
                  optimizer, scheduler, loss_fn, resume_checkpoint)
     
     trainer.train()
@@ -130,7 +114,7 @@ def evaluation(cfg):
     model.eval()
     
     # grid generation
-    grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc) # points in cam coordinates
+    grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc, cfg.H_off) # points in cam coordinates
     grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32).permute(1,2,3,0)
     
     results = evaluate_model(model, dataset, collate_fn, grid, cfg, debug = False)

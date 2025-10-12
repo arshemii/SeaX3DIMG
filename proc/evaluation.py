@@ -391,11 +391,7 @@ def evaluate_model(model, dataset, collate_fn, grid, cfg, debug = False):
             batch["left_img"] = batch["left_img"].to(device_p)
             batch["left_img_previous"] = batch["left_img_previous"].to(device_p)
             batch["right_img"] = batch["right_img"].to(device_p)
-            
-            for sample in batch["label"]:
-                for label in sample:
-                    label['category'] = label['category'].to(device_e)
-                    label['bbox_bev'] = label['bbox_bev'].to(device_e)
+            batch["label"] = batch["label"].to(device_e)
                     
             gt_all.append(batch["label"])
             

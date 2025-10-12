@@ -23,32 +23,25 @@ class SX3DIMG(nn.Module):
         self.cfg = cfg
         self.debug = self.cfg.debug
         self.logs = self.cfg.logging
-        # TODO: self.logger = setup_logger('SX3DIMG_logs', self.cfg.log_dir)
         self.is_train_backbone = is_train_backbone
         
         self.device = self.cfg.device[0]
         
         self.h, self.w = self.cfg.model.in_size
         
-        self.grid_obj = GridGenerator(self.cfg.grid_size, self.cfg.grid_unc) # points in cam coordinates
+        self.grid_obj = GridGenerator(self.cfg.grid_size, self.cfg.grid_unc, self.cfg.H_off) # points in cam coordinates
         self.grid = self.grid_obj.get_grid()['grid'].to(dtype=torch.float32)
-        # TODO: removed to device from grid (following line)
-        self.grid = self.grid
         self.grid_resolution = tuple(int(round(size / res)) for size, res in zip(self.cfg.grid_size, self.cfg.grid_unc))
         self.num_voxels = self.grid_resolution[0] * self.grid_resolution[1] * self.grid_resolution[2]
         
-        
-        if self.cfg.camera.P_l is not None:
-            # TODO: removed to device from p_l (following line)
-            self.P_l = cfg.camera.P_l[0]
-            self.grid_img = cam_to_img(self.grid, self.P_l)
-            # TODO: removed to device from oob_mask (following line)
-            self.oob_mask = oob_voxels(self.grid_img, self.cfg.model.in_size)
-            self.oob_mask_valid = ~self.oob_mask
-            self.oob_mask_flat = self.oob_mask_valid.view(-1)
-            self.grid_flat = grid_for_sample(self.grid_img, (self.h, self.w))
-            self.grid_flat_filtered = self.grid_flat[0][self.oob_mask_flat]
-            self.grid_flat_filtered = self.grid_flat_filtered.unsqueeze(0).to(self.device)
+        self.P_l = cfg.camera.P_l[0]
+        self.grid_img = cam_to_img(self.grid, self.P_l)
+        self.oob_mask = oob_voxels(self.grid_img, self.cfg.model.in_size)
+        self.oob_mask_valid = ~self.oob_mask
+        self.oob_mask_flat = self.oob_mask_valid.view(-1)
+        self.grid_flat = grid_for_sample(self.grid_img, (self.h, self.w))
+        self.grid_flat_filtered = self.grid_flat[0][self.oob_mask_flat]
+        self.grid_flat_filtered = self.grid_flat_filtered.unsqueeze(0).to(self.device)
         
         self.backbone = self.feature_net()
         
@@ -77,7 +70,9 @@ class SX3DIMG(nn.Module):
         self.relu_create_mem = nn.ReLU()
         self.relu_matching = nn.ReLU()
         
-        
+    
+    def return_boundary_mask(self):
+        return self.oob_mask_valid
 
     def feature_net(self):
         if self.cfg.model.back.name == 'hrnet-w48':
@@ -233,8 +228,7 @@ class SX3DIMG(nn.Module):
             out = self.head(voxel)
         else:
             raise NotImplementedError("other representation ehad methods!")
-        # TODO: to remove extra outputs (self.grid already removed)
-        return out, output_memory, self.oob_mask_valid
+        return out, output_memory
     
     def init_weights(self):
         raise NotImplementedError("not yet implemented")
@@ -269,26 +263,7 @@ def get_SX3D_model(cfg, is_train=True, logger = logger):
     return model
     
     
-def test_model(h, w):
-    from model_cong import config_generator
-    cfg = config_generator()
-    
-    model = get_SX3D_model(cfg)
-    print("==> model is generated")
-    img_l = {
-        "img_tensor": torch.randn(1, 3, h, w),
-        "P": torch.randn(3, 4)
-        }
-    
-    img_r = {
-        "img_tensor": torch.randn(1, 3, h, w),
-        "P": torch.randn(3, 4)
-        }
-    
-    model.eval()
-    out = model(img_l, img_r)
-    
-    return out
+
     
     
     

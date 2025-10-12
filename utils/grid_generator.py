@@ -9,7 +9,7 @@ Created on Sat Jun 14 18:29:58 2025
 import torch
 
 class GridGenerator:
-    def __init__(self, grid_size, grid_unc):
+    def __init__(self, grid_size, grid_unc, H_offset):
         """
         grid_size: tuple (width, height, depth) in meters
         grid_unc: tuple (dx, dy, dz) voxel size per axis (resolution)
@@ -21,7 +21,7 @@ class GridGenerator:
         """
         self.grid_size = grid_size    # (width, height, depth)
         self.grid_unc = grid_unc      # (dx, dy, dz)
-
+        self.H_offset = H_offset
         self.grid_resolution = tuple(
             int(round(size / res)) for size, res in zip(grid_size, grid_unc)
         )
@@ -46,7 +46,7 @@ class GridGenerator:
 
         # Define the physical ranges
         x_range = torch.linspace(-width/2 + dx/2, width/2 - dx/2, steps=nx)                        # Width
-        y_range = torch.linspace(-height/2 + dy/2 + 4,  height/2 - dy/2 + 4, steps=ny)             # Height
+        y_range = torch.linspace(-height/2 + dy/2 + self.H_offset,  height/2 - dy/2 + self.H_offset, steps=ny)             # Height
         z_range = torch.linspace(0.0 + dz/2, depth - dz/2, steps=nz)                               # Depth
 
         # Create meshgrid in (W, H, D) order (i.e., X, Y, Z)

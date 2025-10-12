@@ -35,7 +35,6 @@ class kitti_sx3d(Dataset):
         self._calibration_parse()
 
         
-        
     def _calibration_parse(self):
         for instance in self.DF:
             # print(instance["calib_path"])
@@ -44,6 +43,7 @@ class kitti_sx3d(Dataset):
     def _label_parse(self):
         for instance in self.DF:
             instance["labels"] = du.parse_label(instance['label_path'], self.cfg)
+
             
     def statistics(self):
         assert self.mode != 'test'
@@ -57,8 +57,16 @@ class kitti_sx3d(Dataset):
         
         yaw = []
         
+        max_obj_per_frame = 0
+        
         for inst in self.DF:
+            
+            num_obj = 0
+            
             for det in inst['labels']:
+                
+                num_obj += 1
+                
                 yaw.append(det['bbox3d'][6])
                 box = det['bbox3d'][3:6]
                 
@@ -72,11 +80,15 @@ class kitti_sx3d(Dataset):
                 x.append(box[0])
                 y.append(box[1])
                 z.append(box[2])
+                
+            if num_obj > max_obj_per_frame:
+                max_obj_per_frame = num_obj
         
         print(f"X statistics - min: {min(x)} - max: {max(x)}")
         print(f"Y statistics - min: {min(y)} - max: {max(y)}")
         print(f"Z statistics - min: {min(z)} - max: {max(z)}")
-        print(f"Max Y index: {max_id}, Min Y index: {min_id}")
+        print(f"Maximum object per frame: {max_obj_per_frame}")
+        # print(f"Max Y index: {max_id}, Min Y index: {min_id}")
         
         return yaw
         

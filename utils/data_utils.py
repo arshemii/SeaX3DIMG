@@ -33,32 +33,6 @@ def box_generator_3d_to_bev(bbox_3d):
                      bbox_3d[3], bbox_3d[5],
                      bbox_3d[6]])
 
-# def parse_id_file(set_path, data_dir):
-#     result = []
-#     with open(set_path, 'r') as f:
-#         for _, line in enumerate(f):
-#             line = line.strip()
-#             if line:
-#                 result.append({"ID": line})
-                
-#     for ids in result:
-#         instance_str = ids["ID"]
-#         if os.path.exists(data_dir + 'prev_2/' + instance_str + '_02.png'):
-#             ids["img_l_path"] = data_dir + 'prev_2/' + instance_str + '_01.png'
-#             ids["img_l_path_previous"] = data_dir + 'prev_2/' + instance_str + '_02.png'
-#             ids["img_r_path"] = data_dir + 'prev_3/' + instance_str + '_01.png'
-#             ids["img_r_path_previous"] = data_dir + 'prev_3/' + instance_str + '_02.png'
-#             ids["calib_path"] = data_dir + 'calib/' + instance_str + '.txt'
-#             if 'train' in data_dir:
-#                 ids["label_path"] = data_dir + 'label_2/' + instance_str + '.txt'
-#                 if not os.path.exists(ids["label_path"]):
-#                     ids = None
-#         else:
-#             ids = None
-            
-#     final_res = [item for item in result if item is not None]  
-#     return final_res
-
 def parse_id_file(set_path, data_dir):
     result = []
     with open(set_path, 'r') as f:
@@ -165,6 +139,20 @@ def parse_label(label_path, cfg):
                 'score': score}
             bbox_bev = box_generator_3d_to_bev(box_generator_3d(det))
             one_det_in_instance['bbox_bev'] = torch.from_numpy(bbox_bev)
+            
+            if cfg.short_grid_range:
+                x = one_det_in_instance['bbox3d'][3]
+                y = one_det_in_instance['bbox3d'][4]
+                z = one_det_in_instance['bbox3d'][5]
+            
+                # Drop objects outside the defined 3D range
+                if abs(x) > cfg.grid_size[0] / 2.0:  # beyond left/right limits
+                    continue
+                if y < cfg.H_min or y > cfg.H_max:   # outside vertical range
+                    continue
+                if z < 0 or z > cfg.grid_size[2]:    # outside forward depth range
+                    continue
+            
             all_det_in_instance.append(one_det_in_instance)
             
     return all_det_in_instance
@@ -245,14 +233,25 @@ def collate_fn(batch):
     }
 
     if "label" in batch[0].keys():
-        labels = [item["label"] for item in batch]
-        for sm in labels:
-            for obj in sm:
-                obj['bbox2d'] = obj['bbox2d'].to(dtype=torch.float32)
-                obj['bbox3d'] = obj['bbox3d'].to(dtype=torch.float32)
-                obj['bbox_bev'] = obj['bbox_bev'].to(dtype=torch.float32)
-                obj['category'] = obj['category'].to(dtype=torch.int64)
+        
+        max_objects = 15 + 3 # from dataset statistics
+        feature_number = (7   # bbox 3d
+                          + 5  # bbox bev
+                          + 1  # category
+                          + 1)  # valid mask
+        
+        labels = torch.zeros((len(images_l), max_objects, feature_number), dtype=torch.float32)
+        
+        for batch_num, item in enumerate(batch):
+            label_p_f = item["label"]
+            for idx, obj in enumerate(label_p_f):
+                labels[batch_num, idx, 0:7] = obj['bbox3d'].to(dtype=torch.float32)
+                labels[batch_num, idx, 7:12] = obj['bbox_bev'].to(dtype=torch.float32)
+                labels[batch_num, idx, 12] = obj['category'].to(dtype=torch.float32)
+                labels[batch_num, idx, 13] = 1.0
+            
         batch_dict['label'] = labels
+        
     return batch_dict
         
     

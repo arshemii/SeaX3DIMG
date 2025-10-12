@@ -27,7 +27,7 @@ def load_checkpoint(filename, model, optimizer=None):
     return checkpoint.get('epoch', 0)
 
 class Trainer:
-    def __init__(self, cfg, model, dataset, grid, collate_fn, metric_module,
+    def __init__(self, cfg, model, dataset, collate_fn,
                  optimizer, scheduler, loss_fn, resume_checkpoint=None):
         
         self.cfg = cfg
@@ -35,21 +35,15 @@ class Trainer:
         self.model = model.to(self.device)
         self.dataset = dataset
         self.collate_fn = collate_fn
-        self.metric_module = metric_module
         self.num_epochs = self.cfg.dev.num_epochs
         self.optimizer = optimizer
         self.loss_fn = loss_fn
-        self.grid = grid
         self.scheduler = scheduler
-        assert self.grid.shape[-1] == 3
 
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
         
-        if cfg.model.head == 'box3d':
-            self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_3d
-        elif cfg.model.head == 'box2d':
-            self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_bev
+        self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_bev
         self.log_dir = self.cfg.log_dir
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)
@@ -57,12 +51,13 @@ class Trainer:
         self.start_epoch = 0
         if resume_checkpoint:
             print(f"Resuming from checkpoint: {resume_checkpoint}")
-            self.start_epoch = load_checkpoint(resume_checkpoint, self.model, self.optimizer)
+            if self.cfg.dev.continue_training:
+                self.start_epoch = load_checkpoint(resume_checkpoint, self.model, self.optimizer)
         
         self.dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True,
                                      collate_fn=self.collate_fn, num_workers=self.num_workers)
     
-    def _print_train_stats(self, epoch, avg_loss, metrics, train_time):
+    def _print_train_stats(self, epoch, avg_loss, train_time):
         # TODO: use method print_metrics from metric_module object
         print(f"Training epoch {epoch} with loss {avg_loss:.2f} in {train_time:.2f}")
     
@@ -70,9 +65,6 @@ class Trainer:
         self.model.train()
         running_loss = 0.0
         avg_loss = 0.0
-        if self.metric_module:
-            if epoch % 4 == 0:
-                eval_pair = []
                 
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         for batch_idx, batch in pbar:
@@ -81,39 +73,23 @@ class Trainer:
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
-
-            for sample in batch["label"]:
-                for label in sample:
-                    label['category'] = label['category'].to(self.device)
-                    label['bbox_bev'] = label['bbox_bev'].to(self.device)
-                    label['bbox3d'] = label['bbox3d'].to(self.device)
-
+            batch["label"] = batch["label"].to(self.device)
             
             self.optimizer.zero_grad()
             
             #create temporal memory for both left and right image from t - dt
             with autocast(device_type='cuda'):
                 temporal_l = self.model.create_memory(batch["left_img_previous"])
-                full_output = self.model(batch["left_img"], batch["right_img"], temporal_l)
+                outputs = self.model(batch["left_img"], batch["right_img"], temporal_l)[0]
                 
                 # TODO: reduce memory oh
                 del temporal_l
                 
-                outputs = full_output[0]  # main prediction
-                oob_mask_valid = full_output[2]
-                
-                # TODO: reduce memory oh
-                del full_output
-                
-                if self.metric_module:
-                    if epoch % 4 == 0:
-                        eval_pair.append([outputs, oob_mask_valid, batch["label"]])
-                
                 assert "label" in batch.keys()
-                loss = self.loss_fn(outputs, batch["label"], self.grid, oob_mask_valid)
+                loss = self.loss_fn(outputs, batch["label"])
                 
                 # TODO: reduce overhead
-                del outputs, oob_mask_valid
+                del outputs
                 
             # TODO: must be removed
             if torch.isnan(loss['total']) or loss['total'].item() == 0.0:
@@ -136,19 +112,12 @@ class Trainer:
             
         self.scheduler.step()
         
-        if self.metric_module:
-            if epoch % 4 == 0:
-                metric_values = self.metric_module.eval_from_prediction(eval_pair, self.grid)
-        else:
-            metric_values = None
         
         avg_epoch_loss = running_loss / len(self.dataloader)
-        return avg_epoch_loss, metric_values
+        return avg_epoch_loss
+
     
-    def evaluate(self):
-        raise NotImplementedError("Target must be list for integration")
-    
-    def save_epoch_log(self, epoch, loss, metrics, train_time):
+    def save_epoch_log(self, epoch, loss, train_time):
         log = {
             'total epoch': self.num_epochs,
             'start epoch': self.start_epoch,
@@ -161,12 +130,8 @@ class Trainer:
             'train_time_sec': train_time,
             'timestamp': time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
         }
-        if self.metric_module:
-            if epoch % 4 == 0:
-                log['metrics'] = metrics
                 
         log_filename = os.path.join(self.log_dir, f'epoch_{epoch}_log.json')
-        # TODO: why opening here?
         with open(log_filename, 'w') as f:
             json.dump(log, f, indent=4)
     
@@ -176,14 +141,9 @@ class Trainer:
             
             avg_loss, _ = self.train_epoch(epoch)
             
-            if self.metric_module:
-                metrics = self.evaluate()
-            else:
-                metrics = None
-            
             train_time = time.time() - start_time
             
-            self._print_train_stats(epoch, avg_loss, metrics, train_time)
+            self._print_train_stats(epoch, avg_loss, train_time)
             
             # Save checkpoint
             checkpoint_path = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch}.pth')
@@ -202,4 +162,4 @@ class Trainer:
                 os.remove(checkpoint_path_prev)
             
             # Save epoch logs
-            self.save_epoch_log(epoch, avg_loss, metrics, train_time)
+            self.save_epoch_log(epoch, avg_loss, train_time)

@@ -30,6 +30,7 @@ def config_generator():
     cfg.dev.lr = 1e-4
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
+    cfg.dev.continue_training = False
     
     cfg.num_batch = 1
     cfg.num_worker = 0
@@ -53,7 +54,6 @@ def config_generator():
     
     cfg.data.scale = max(cfg.data.scale_1, cfg.data.scale_0)
     
-    # cfg.model.head = 'box3d'
     cfg.model.head = 'box2d'
     cfg.model.back.name = 'hrnet-w48'
     cfg.model.unet_cout = 2
@@ -93,9 +93,16 @@ def config_generator():
         # y--> -0.64 to +3.86
         # z --> +94
     
-    cfg.grid_size = (82.0, 15.0, 94.5)
-    #cfg.grid_size = (20.0, 12.0, 42.0)
-    cfg.grid_unc = (0.82, 0.5, 1.35)
+    cfg.grid_size = (20.0, 12.0, 42.0)  # H from -2 to 10
+    cfg.grid_unc = (0.62, 0.65, 0.60)
+    
+    if cfg.grid_size[2] < 90.0:
+        cfg.short_grid_range = True
+    
+    cfg.grid_resolution = tuple(int(round(size / res)) for size, res in zip(cfg.grid_size, cfg.grid_unc))
+    cfg.H_off = 4
+    cfg.H_min = -cfg.grid_size[1]/2 + cfg.H_off
+    cfg.H_max = cfg.grid_size[1]/2 + cfg.H_off
     
     cfg.model.sx3d.is_confidence = True
     
@@ -110,6 +117,8 @@ def config_generator():
     cfg.data.mean = [np.array([0.485, 0.456, 0.406])]
     cfg.data.std = [np.array([0.229, 0.224, 0.225])]
     cfg.data.img_layout = 'rgb'
+    
+    cfg.data.max_obj_per_frame = 15
     
     
     cfg.model.back.out = "features"
@@ -159,8 +168,11 @@ def config_generator():
     cfg.eval.save_dir = './eval_dir/'
     cfg.eval.iou_list = [0.10, 0.25, 0.50, 0.75, 0.90]
     cfg.eval.objectness_threshold = 0.5
-    cfg.eval.range_limit = False  # can add a number in float
+    cfg.eval.range_limit = False
     cfg.eval.range = 0
+    if cfg.eval.range_limit:
+        assert cfg.eval.range <= cfg.grid_size[2]
+    
     cfg.eval.eval_device = [torch.device('cpu')]
     cfg.eval.cl0 = "Car, Van"
     cfg.eval.cl1 = "Truck"
