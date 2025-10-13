@@ -190,43 +190,30 @@ class loss_bev(nn.Module):
             return torch.stack(loss).mean()
 
     def _drop_dets(self, assignments, init_c_voxels, init_gtl):
-        
-        n = len(init_gtl)
-        gtl = [[] for _ in range(n)]
-        c_voxels = [[] for _ in range(n)]
+        """
+        Drops ground truth objects that fall outside the camera view.
     
-        for bn in range(len(assignments)):
-            if len(init_gtl[bn]) == 0:
+        Args:
+            assignments: Tensor [B, W, H, D] with voxel→object indices
+            init_c_voxels: Tensor [B, 18, 4] (i, j, k, obj_idx)
+            init_gtl: Tensor [B, 18, 14] (object parameters)
+    
+        Returns:
+            assignments: Updated tensor with dropped voxels set to -1
+            c_voxels: Updated (B, 18, 4) tensor (invalid ones set to -1)
+            gtl: Updated (B, 18, 14) tensor (dropped objects set to 0)
+        """
+        B, max_objects, _ = init_gtl.shape
+        
+        for b in range(B):
+            # skip if this batch has no valid objects
+            if init_gtl[b, :, 13].sum() == 0:
                 continue
-            else:
-                gtl_sample = []
-                c_voxels_sample = []
-                gt_map = {}  # maps original_gt_idx -> new_gt_idx
-                new_idx = 0
+
+            vox = init_c_voxels[b]
+            valid_mask = vox[:, 0] >= 0
         
-                for i, j, k, gt_idx in init_c_voxels[bn]:
-                    if self.oob_mask_valid[i, j, k]:
-                        if gt_idx not in gt_map:
-                            gt_map[gt_idx] = new_idx
-                            gtl_sample.append(init_gtl[bn][gt_idx])
-                            new_idx += 1
-                        c_voxels_sample.append((i, j, k, gt_map[gt_idx]))
-        
-                # Now safely remap assignments
-                for old_idx, new_idx in gt_map.items():
-                    assignments[bn][assignments[bn] == old_idx] = new_idx
-        
-                # Set all non-included GT indices to -1
-                orig_indices = set(range(len(init_gtl[bn])))
-                dropped_indices = orig_indices - set(gt_map.keys())
-                for idx in dropped_indices:
-                    assignments[bn][assignments[bn] == idx] = -1
-        
-                gtl[bn] = gtl_sample
-                c_voxels[bn] = c_voxels_sample
-            
-        # del init_c_voxels, init_gtl, 
-        return assignments, c_voxels, gtl
+        return assignments, init_c_voxels, init_gtl
     
     def classification_loss(self, pred_cls_logits, assignments, gtl):
         """
