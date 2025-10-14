@@ -147,6 +147,8 @@ class loss_bev(nn.Module):
         self.alpha = self.cfg.loss.alpha
         self.gamma = self.cfg.loss.gamma
         self.beta = self.cfg.loss.beta
+        self.object_threshold = self.cfg.loss.object_threshold_loss
+        self.zeta = self.cfg.loss.zeta
         self.voxel_size = self.cfg.grid_unc
         self.lb = self.cfg.debug_loss  # local debug
         
@@ -211,9 +213,10 @@ class loss_bev(nn.Module):
         else:
             return torch.stack(loss).mean()
 
-    def classification_loss(self, pred_cls_logits, assignments, gtl):
+    def classification_loss(self, pred_cls_logits, pred_obj_logits, assignments, gtl):
         """
         pred_cls_logits: [B, num_classes, W, D]
+        pred_obj_logits: [B, 1, W, D]
         assignments: tensor of shape B, W, H, D
         gtl: tensor of shape B, 18, 14
         """
@@ -223,35 +226,41 @@ class loss_bev(nn.Module):
         # TODO
         # TODO
         
-        
         loss = []
+        num_classes = pred_cls_logits.shape[1]
+    
         for b in range(self.B):
-            if gtl[b, :, -1].sum() == 0.0:
-                continue
-            else:
-                valid_mask = (assignments[b] >= 0)  # only valid object voxels
-                if valid_mask.sum() == 0:
-                    continue
-                                
+            valid_mask = (assignments[b] >= 0)
+            bg_mask = (assignments[b] == -1)
+    
+            # ---- (1) CLASS LOSS for object voxels ----
+            if valid_mask.any():
                 tg_classes = gtl[b, :, 12]
-                if_there_is_obj__mask = gtl[b][:, 13] == 1
-                tg_classes_inside = tg_classes[if_there_is_obj__mask]
-                tg_classes_inside[tg_classes_inside == -1] = -100  # ignore objects
-                
-                # Preds for valid voxels: [N, C]
+                present_mask = gtl[b, :, 13] == 1
+                tg_classes = tg_classes[present_mask]
+                tg_classes[tg_classes == -1] = -100  # ignore invalid
                 pred_voxels = pred_cls_logits[b].permute(1, 2, 0)[valid_mask]
                 
-                ce = nn.functional.cross_entropy(pred_voxels, tg_classes, reduction='none', ignore_index=-100)
+                ce = F.cross_entropy(pred_voxels, tg_classes, reduction='none', ignore_index=-100)
                 pt = torch.exp(-ce)
-                focal_loss = self.alpha * (1 - pt) ** self.gamma * ce
-        
-                loss.append(focal_loss.mean())
-
-        if len(loss) == 0:
+                focal = self.alpha * (1 - pt) ** self.gamma * ce
+                loss.append(focal.mean())
+    
+            # ---- (2) BACKGROUND CONSISTENCY LOSS ----
+            if bg_mask.any():
+                high_obj_mask = torch.sigmoid(pred_obj_logits[b, 0]) > self.object_threshold
+                bad_mask = bg_mask & high_obj_mask
+                if bad_mask.any():
+                    pred_bg_voxels = pred_cls_logits[b].permute(1, 2, 0)[bad_mask]
+                    pred_probs = F.softmax(pred_bg_voxels, dim=-1)
+                    target_probs = torch.full_like(pred_probs, 1.0 / num_classes)
+                    kl_loss = F.kl_div(pred_probs.log(), target_probs, reduction='batchmean')
+                    loss.append(self.zeta * kl_loss)  # small weight for regularization
+    
+        if not loss:
             return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True)
         else:
             return torch.stack(loss).mean()
-        
         
     def center_loss(self, pred_offsets, assignments, gtl, grid):
         """
