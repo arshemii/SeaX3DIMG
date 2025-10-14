@@ -163,6 +163,8 @@ def config_generator():
     cfg.loss.alpha = 0.25
     cfg.loss.gamma = 2.0
     cfg.loss.beta = 1.0
+    cfg.loss.object_threshold_loss = 0.5
+    cfg.loss.zeta = 0.5    # to penalize background voxels if objectness is high
     
 
     cfg.eval.save_dir = './eval_dir/'
