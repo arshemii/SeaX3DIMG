@@ -198,6 +198,7 @@ class loss_bev(nn.Module):
             valid = (voxel_assignments[b] != -2)
             pred = pred_obj_logits[b, 0][valid]
             tgt = target[valid]
+            # the loss is not calculated at all for ignored objects
             
             if pred.numel() == 0:
                 continue  # skip this batch if no valid voxels
@@ -219,9 +220,6 @@ class loss_bev(nn.Module):
         pred_obj_logits: [B, 1, W, D]
         assignments: tensor of shape B, W, H, D
         gtl: tensor of shape B, 18, 14
-        
-        
-        we know that maximumly can be present 18 object per frame
         """
         
         loss = []
