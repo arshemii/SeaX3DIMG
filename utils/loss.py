@@ -157,12 +157,11 @@ class loss_bev(nn.Module):
         # bev_grid will be 100, 70, 2
         return bev_grid
     
-    def _mark_oob_dets(self, assignments, c_voxels, gtl):
+    def _mark_oob_dets(self, c_voxels, gtl):
         """
         Drops ground truth objects that fall outside the camera view.
     
         Args:
-            assignments: Tensor [B, W, H, D] with voxel→object indices
             c_voxels: Tensor [B, 18, 4] (i, j, k, obj_idx)
             gtl: Tensor [B, 18, 14] (object parameters)
     
@@ -180,11 +179,10 @@ class loss_bev(nn.Module):
                 if gt_idx >= 0:
                     if not self.oob_mask_valid[i, j, k]:
                         # i, j, k is out of the boundary
-                        assignments[b][assignments[b] == gt_idx] = -1
                         c_voxels[b, c_voxels[b, :, 3] == gt_idx] = -1
                         gtl[b, gt_idx, -1] = 0.0
                     
-        return assignments, c_voxels, gtl
+        return c_voxels, gtl
     
     def object_conf_loss(self, pred_obj_logits, voxel_assignments):
         """
@@ -415,6 +413,9 @@ class loss_bev(nn.Module):
         
         assignments = torch.full((self.B, self.grid.shape[0], self.grid.shape[1], self.grid.shape[2]),
                                       fill_value=-1, dtype=torch.long, device=self.grid.device)
+
+        for b in range(self.B):
+            assignments[b][~self.oob_mask_valid] = -3
         
         c_voxels = torch.full((self.B, 18, 4), fill_value=-1, dtype=torch.long, device=self.grid.device)
         
@@ -423,10 +424,10 @@ class loss_bev(nn.Module):
         
         
         # Removing out of the bound detections from ground truth
-        assignments, c_voxels, gtl = self._mark_oob_dets(assignments, c_voxels, gtl)
+        c_voxels, gtl = self._mark_oob_dets(c_voxels, gtl)
         """
         result will be:
-            1. assignment has no more voxels assigned to oob objects
+            1. assignment has no more voxels assigned to oob objects and all oob voxels are -3
             2. c_voxels has all objects, but the gt index of oob ones is -1
             3. gtl has all obejcts but the valid flag of oob ones is zzero now
         """
