@@ -9,7 +9,7 @@
 
 ### ToDos:
   
-  * Modification of offset regression loss
+  * Modification of offset regression loss (why not including center voxel to the method?)
   * Modification of dimension and yaw loss
   * A strict check on objects to avoid in gtl for gtl[-1] == 0
   * Modifying the architecture
