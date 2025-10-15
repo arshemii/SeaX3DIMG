@@ -10,9 +10,9 @@ import torch
 import torch.nn as nn
 
 
-class head_occupancy(nn.Module):
+class head_occupancy_bev(nn.Module):
     def __init__(self, cfg):
-        super(head_occupancy, self).__init__()
+        super(head_occupancy_bev, self).__init__()
         self.cfg = cfg
         self.h_resolution = int(round(self.cfg.grid_size[1]/self.cfg.grid_unc[1]))
         self.out_ch = 1
@@ -55,9 +55,9 @@ class head_occupancy(nn.Module):
         return out
             
     
-class head_box_2d_bev(nn.Module):
+class head_box_bev(nn.Module):
     def __init__(self, cfg):
-        super(head_box_2d_bev, self).__init__()
+        super(head_box_bev, self).__init__()
         self.cfg = cfg
         self.h_resolution = int(round(self.cfg.grid_size[1]/self.cfg.grid_unc[1]))
         self.out_ch = self.cfg.model.num_class + 5 + 1 # with confidence score
