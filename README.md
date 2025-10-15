@@ -1,7 +1,18 @@
-# ToDo:
+## Todo list and checks:
 
-### 3D occupancy grid mapping - visualization
+### Done
+  * Initialize OoB mask outside of runtime ☑
+  * Converting ground truth to tensor (currently list) ☑
+  * Removal of all lists and convert them to tensor ☑
+  * Modification of objectness loss ☑
+  * Correction of classification loss by penalizing non valid voxels ☑
 
-### Finalizing metrics to evaluate (IoU for mAP)
+### ToDos:
+  
+  * Modification of offset regression loss
+  * Modification of dimension and yaw loss
+  * A strict check on objects to avoid in gtl for gtl[-1] == 0
+  * Modifying the architecture
 
-### Do we need a 2d BEV?
+### Architecture overview:
+> It is possible to have two different head, with modified disparity. One is to avoid at all classification and put in as binary occupancy grid maps, another one is to have the same head but reduce the tensor channels at disparity.
