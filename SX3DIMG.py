@@ -45,10 +45,10 @@ class SX3DIMG(nn.Module):
         
         self.backbone = self.feature_net()
         
-        if self.cfg.model.head == 'box2d':
-            self._init_2d_head()
-        elif self.cfg.model.head == 'box3d':
-            self._init_3d_head()
+        if self.cfg.model.head == 'bev_box':
+            self._init_bev_box_head()
+        elif self.cfg.model.head == 'bev_occupancy':
+            self._init_bev_occupancy_head()
         else:
             raise NotImplementedError("other representation ehad methods!")
         
@@ -158,11 +158,11 @@ class SX3DIMG(nn.Module):
         
         return full_voxel
     
-    def _init_2d_head(self):
-        self.head = HD.head_box_2d_bev(self.cfg)
+    def _init_bev_box_head(self):
+        self.head = HD.head_box_bev(self.cfg)
         
-    def _init_3d_head(self):
-        self.head = HD.head_box_3d(self.cfg)
+    def _init_bev_occupancy_head(self):
+        self.head = HD.head_occupancy_bev(self.cfg)
         
     def forward(self, img_l, img_r, mem_left, calib = None):
         """
