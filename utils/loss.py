@@ -194,9 +194,12 @@ class loss_bev(nn.Module):
         for b in range(self.B):
             target = (voxel_assignments[b] >= 0).float()
             valid = (voxel_assignments[b] != -2)
-            pred = pred_obj_logits[b, 0][valid]
             tgt = target[valid]
             # the loss is not calculated at all for ignored objects
+
+            # TODO here
+            pred = pred_obj_logits[b, 0][self.tg_mask[b] | self.bg_mask[b]]
+            tgt = self.tg_mask[b].float()
             
             if pred.numel() == 0:
                 continue  # skip this batch if no valid voxels
@@ -434,6 +437,11 @@ class loss_bev(nn.Module):
                     
         assignments_bev = aggregate_assignment(assignments)
         del assignments
+
+        self.tg_mask = assignments_bev >= 0
+        self.bg_mask = assignments_bev == -1
+        self.ign_mask = assignments_bev == -2
+        self.blind_mask = assignments_bev == -3
         
         # Objectness loss
         self.loss['obj_conf'] = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments_bev)
