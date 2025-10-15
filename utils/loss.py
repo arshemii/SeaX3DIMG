@@ -192,17 +192,13 @@ class loss_bev(nn.Module):
         loss = []
                 
         for b in range(self.B):
-            target = (voxel_assignments[b] >= 0).float()
-            valid = (voxel_assignments[b] != -2)
-            tgt = target[valid]
-            # the loss is not calculated at all for ignored objects
-
-            # TODO here
-            pred = pred_obj_logits[b, 0][self.tg_mask[b] | self.bg_mask[b]]
-            tgt = self.tg_mask[b].float()
+            mask = (self.tg_mask[b] | self.bg_mask[b]) & (~self.ign_mask[b]) & (~self.blind_mask[b])
             
-            if pred.numel() == 0:
-                continue  # skip this batch if no valid voxels
+            if not mask.any():
+                continue
+            
+            pred = pred_obj_logits[b, 0][mask]
+            tgt = self.tg_mask[b][mask].float() 
         
             # Focal BCE
             bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
@@ -228,7 +224,8 @@ class loss_bev(nn.Module):
     
         for b in range(self.B):
             valid_mask = (assignments[b] >= 0)
-            bg_mask = (assignments[b] == -1)
+            self.bg_mask = (assignments[b] == -1)
+            self.tg_mask
             
             # Loss in valid voxels
             if valid_mask.any():
@@ -330,7 +327,7 @@ class loss_bev(nn.Module):
             gt = gtl[b, gt_idx_valid, 7:9].to(pred.device)  # [N_valid, 2]
     
             # L1 loss per object
-            l1 = F.l1_loss(pred, gt, reduction='none').mean(dim=1)  # (N_valid,)
+            l1 = nn.functional.l1_loss(pred, gt, reduction='none').mean(dim=1)  # (N_valid,)
             loss.append(l1.mean())
     
         if len(loss) == 0:
@@ -368,7 +365,7 @@ class loss_bev(nn.Module):
             diff = (pred_vals - gt_vals + math.pi) % (2 * math.pi) - math.pi
     
             # Smooth L1 over differences
-            loss = torch.nn.functional.smooth_l1_loss(
+            loss = nn.functional.smooth_l1_loss(
                 diff, torch.zeros_like(diff), reduction='mean', beta=self.beta
             )
             loss_terms.append(loss)
@@ -417,8 +414,6 @@ class loss_bev(nn.Module):
         assignments = torch.full((self.B, self.grid.shape[0], self.grid.shape[1], self.grid.shape[2]),
                                       fill_value=-1, dtype=torch.long, device=self.grid.device)
 
-        for b in range(self.B):
-            assignments[b][~self.oob_mask_valid] = -3
         
         c_voxels = torch.full((self.B, 18, 4), fill_value=-1, dtype=torch.long, device=self.grid.device)
         
@@ -428,6 +423,9 @@ class loss_bev(nn.Module):
         
         # Removing out of the bound detections from ground truth
         c_voxels, gtl = self._mark_oob_dets(c_voxels, gtl)
+        
+        for b in range(self.B):
+            assignments[b][~self.oob_mask_valid] = -3
         """
         result will be:
             1. assignment has no more voxels assigned to oob objects and all oob voxels are -3
