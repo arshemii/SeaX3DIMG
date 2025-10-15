@@ -306,20 +306,34 @@ class loss_bev(nn.Module):
         
     def dimension_loss(self, pred_dims, center_voxels, gtl):
         """
-        pred_dims: [B, 2, W, D]
+        pred_dims: [B, 2, W, D] - predicted (w, l)
+        center_voxels: [B, 18, 4] - (i, j, k, gt_idx)
+        gtl: [B, 18, 14] - GT info, w and l are at indices 7 and 8
         """
-        
         loss = []
+        B = pred_dims.shape[0]
         
-        for b in range(self.B):
-            if len(gtl[b]) == 0:
+        for b in range(B):
+            cv = center_voxels[b]  # [18, 4]
+            gt_indices = cv[:, 3].long()  # [18]
+            valid_mask = (gt_indices >= 0) & (gtl[b, gt_indices, -1] == 1)  # present and valid objects
+            
+            if not valid_mask.any():
                 continue
-            else:
-                for (i, j, k, gt_idx) in center_voxels[b]:
-                    pred = pred_dims[b, :, i, k]
-                    gt = gtl[b][gt_idx]['bbox_bev'][0:2].to(pred.device)
-                    loss.append(nn.functional.l1_loss(pred, gt))
-                    
+    
+            # Get valid entries
+            i = cv[valid_mask, 0].long()
+            k = cv[valid_mask, 2].long()
+            gt_idx_valid = gt_indices[valid_mask]
+    
+            # Predictions for corresponding voxels
+            pred = pred_dims[b, :, i, k].permute(1, 0)  # [N_valid, 2]
+            gt = gtl[b, gt_idx_valid, 7:9].to(pred.device)  # [N_valid, 2]
+    
+            # L1 loss per object
+            l1 = F.l1_loss(pred, gt, reduction='none').mean(dim=1)  # (N_valid,)
+            loss.append(l1.mean())
+    
         if len(loss) == 0:
             return torch.tensor(0.0, device=pred_dims.device, requires_grad=True)
         else:
@@ -328,26 +342,42 @@ class loss_bev(nn.Module):
     def yaw_loss(self, pred_yaw, center_voxels, gtl):
         """
         pred_yaw: [B, 1, W, D]
+        center_voxels: [B, 18, 4]  (i, j, k, gt_idx)
+        gtl: [B, 18, 14]  (gtl[..., 11] = yaw)
         """
-        loss = []
-        
+        loss_terms = []
+    
         for b in range(self.B):
-            if len(gtl[b]) == 0:
+            centers = center_voxels[b]
+            gt_indices = centers[:, 3].long()
+            valid_mask = (gt_indices >= 0) & (gtl[b, gt_indices, -1] == 1)  # present and valid objects
+    
+            if valid_mask.sum() == 0:
                 continue
-            else:
-                for (i, j, k, gt_idx) in center_voxels[b]:
-                    pred = pred_yaw[b, 0, i, k]
-                    gt = gtl[b][gt_idx]['bbox_bev'][4].to(pred.device)
-                    
-                    # minimal angle difference (in radians) in range [-π, π]
-                    diff = (pred - gt + math.pi) % (2 * math.pi) - math.pi
-                    
-                    loss.append(nn.functional.smooth_l1_loss(diff, torch.tensor(0.0, device=pred_yaw.device)))
-
-        if len(loss) == 0:
+    
+            i = centers[valid_mask, 0].long()
+            k = centers[valid_mask, 2].long()  # note: D dimension
+            gt_idx = gt_indices[valid_mask]
+    
+            # Predicted yaw values at object center voxels
+            pred_vals = pred_yaw[b, 0, i, k]  # (N,)
+    
+            # Ground-truth yaw from gtl
+            gt_vals = gtl[b, gt_idx, 11].to(pred_yaw.device)  # (N,)
+    
+            # Minimal angular difference in range [−π, π]
+            diff = (pred_vals - gt_vals + math.pi) % (2 * math.pi) - math.pi
+    
+            # Smooth L1 over differences
+            loss = torch.nn.functional.smooth_l1_loss(
+                diff, torch.zeros_like(diff), reduction='mean', beta=self.beta
+            )
+            loss_terms.append(loss)
+    
+        if len(loss_terms) == 0:
             return torch.tensor(0.0, device=pred_yaw.device, requires_grad=True)
         else:
-            return torch.stack(loss).mean()
+            return torch.stack(loss_terms).mean()
 
     def forward(self, prediction, gtl):
         """
