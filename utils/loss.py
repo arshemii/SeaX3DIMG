@@ -94,38 +94,36 @@ def aggregate_assignment(assignments: torch.Tensor) -> torch.Tensor:
       2. If mix of object and ignored (-2) → pick from object ones.
       3. If only ignored (-2) → pick one randomly from ignored.
       4. Else (all -1) → -1 background.
+      5. Index -3 has priority to all. even to background
     """
     B, W, H, D = assignments.shape
     bev = torch.full((B, W, D), -1, dtype=assignments.dtype, device=assignments.device)
 
     for b in range(B):
-        ass = assignments[b]  # [W, H, D]
+        ass = assignments[b]
 
-        # Masks for presensce of an object
         obj_mask = ass >= 0
         ign_mask = ass == -2
+        blind_mask = ass == -3
 
-        # pillars that have at least one object
-        has_obj = obj_mask.any(dim=1)  # [W, D]
-        has_ign = ign_mask.any(dim=1)  # [W, D]
-
-        # planar coordinate of pillars with object
+        has_obj = obj_mask.any(dim=1)
+        has_ign = ign_mask.any(dim=1)
+        
         xs, zs = torch.nonzero(has_obj | has_ign, as_tuple=True)
-
         for x, z in zip(xs.tolist(), zs.tolist()):
             pillar = ass[x, :, z]
             objs = pillar[pillar >= 0]
             if len(objs) > 0:
-                idx = torch.randint(len(objs), (1,), device=ass.device)
+                idx = torch.randint(0, len(objs), (1,), device=ass.device)
                 bev[b, x, z] = objs[idx]
             else:
                 igs = pillar[pillar == -2]
                 if len(igs) > 0:
-                    idx = torch.randint(len(igs), (1,), device=ass.device)
+                    idx = torch.randint(0, len(igs), (1,), device=ass.device)
                     bev[b, x, z] = igs[idx]
-                else:
-                    bev[b, x, z] = -1
-
+        
+        has_blind = blind_mask.any(dim=1)
+        bev[b][has_blind] = -3
     return bev
 
 class loss_bev(nn.Module):
@@ -150,7 +148,6 @@ class loss_bev(nn.Module):
         self.object_threshold = self.cfg.loss.object_threshold_loss
         self.zeta = self.cfg.loss.zeta
         self.voxel_size = self.cfg.grid_unc
-        self.lb = self.cfg.debug_loss  # local debug
         
     def _grid3d_to_grid2d(self):
         bev_grid = self.grid[:, 0, :, :][:, :, [0, 2]]
@@ -159,12 +156,10 @@ class loss_bev(nn.Module):
     
     def _mark_oob_dets(self, c_voxels, gtl):
         """
-        Drops ground truth objects that fall outside the camera view.
-    
+        mark ground truth objects that fall outside the camera view.
         Args:
             c_voxels: Tensor [B, 18, 4] (i, j, k, obj_idx)
             gtl: Tensor [B, 18, 14] (object parameters)
-    
         Returns:
             All input arguments will be updated
         """
@@ -184,21 +179,23 @@ class loss_bev(nn.Module):
                     
         return c_voxels, gtl
     
-    def object_conf_loss(self, pred_obj_logits, voxel_assignments):
+    def object_conf_loss(self, pred_obj_logits, assignments):
         """
+        Calculate objectness loss only [assignments = -3 is not included]
         pred_obj_logits: [B, 1, W, D]
-        voxel_assignments: a tensor of shape B, W, H, D
+        assignments: [B, W, D]
         """
         loss = []
                 
         for b in range(self.B):
-            mask = (self.tg_mask[b] | self.bg_mask[b]) & (~self.ign_mask[b]) & (~self.blind_mask[b])
+            mask = (assignments[b] >= -1)
             
             if not mask.any():
+                # cannot happen, but for safety!
                 continue
-            
-            pred = pred_obj_logits[b, 0][mask]
-            tgt = self.tg_mask[b][mask].float() 
+
+            pred = pred_obj_logits[b, 0][mask]                # shape: [Number of interested objects voxels and background]
+            tgt = (assignments[b][mask] >= 0).float()         # 1 for object voxels and 0 for bg voxels
         
             # Focal BCE
             bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
@@ -215,22 +212,27 @@ class loss_bev(nn.Module):
         """
         pred_cls_logits: [B, num_classes, W, D]
         pred_obj_logits: [B, 1, W, D]
-        assignments: tensor of shape B, W, H, D
-        gtl: tensor of shape B, 18, 14
+        assignments:     [B, W, D]
+        gtl:             [B, 18, 14]
+        ** gtl --> for validity flag in gtl[:, :, 13]:
+                        if flag is 1 --> valid
+                        if flag is zero -->
+                                category in [:, :, 12] is -1 --> ignored object
+                                category in [:, :, 12] is not -1 --> Out of FOV objects
         """
         
         loss = []
         num_classes = pred_cls_logits.shape[1]
     
         for b in range(self.B):
-            valid_mask = (assignments[b] >= 0)
-            self.bg_mask = (assignments[b] == -1)
-            self.tg_mask
+            obj_mask = (assignments[b] >= 0)
+            bg_mask = (assignments[b] == -1)
+            
             
             # Loss in valid voxels
-            if valid_mask.any():
+            if obj_mask.any():
                 tg_classes = gtl[b, :, 12]
-                # TODO: gtl[b] = gtl[b] if flag is not zero
+                tg_classes_mask = (tg_classes != -1)
                 tg_classes[tg_classes == -1] = -100  # ignore invalid
                 
                 voxel_obj_indices = assignments[b][valid_mask].long()  # [N_valid]
@@ -388,58 +390,43 @@ class loss_bev(nn.Module):
         gtl is is a Tensor:
             Shape: (B, 18, 14) where:
                 B is batch size
-                18 is maximum object per instance
-                14 = 7 for 3d box, 5 for bev vox, 1 for category, and 1 for valid obj
-            3d box order is: h, w, l, cx, cy, cz, yaw
-            box bev order is w, l, cx, cz, yaw
-            object class (zero to num_classes-1 and -1 for not important objects)
-
+                18 is maximum object per instance [so, if there are less pobjects, the valid flag is zero]
+                14 --> label items
+            3d box order is: h, w, l, cx, cy, cz, yaw --> 0:7
+            box bev order is w, l, cx, cz, yaw --> 7:12
+            object class (zero to num_classes-1 and -1 for not important objects) --> 12
+            valid flag: [1 valid, 0 non-valid] ---> 13
         """
-        
-        assert len(prediction) == len(gtl), "Values are not all equal, batch size mismatch with prediction"
         assert prediction.shape == (len(gtl), 10, self.grid.shape[0], self.grid.shape[2]), \
             f"Prediction has a wrong shape, expected shape is: [n, out_ch, w_res, h_res, d_res], received: {prediction.shape}"
-            
-        assert gtl.shape == (len(prediction), 18, 14), \
-            f"Prediction has a wrong shape, expected shape is: [n, out_ch, w_res, h_res, d_res], received: {prediction.shape}"
+        assert gtl.shape == (len(prediction), 18, 14), "Collate function must be checked!"
         
         self.B = len(prediction)
+        self.loss = {}
+        
         if self.B == 0:
             device = prediction.device
             return {k: torch.tensor(0.0, device=device) for k in ['obj_conf', 'cls_loss', 'center_loss', 'dim_loss', 'yaw_angle_loss', 'total']}
-        
-        self.loss = {}
-        
-        
+
         assignments = torch.full((self.B, self.grid.shape[0], self.grid.shape[1], self.grid.shape[2]),
                                       fill_value=-1, dtype=torch.long, device=self.grid.device)
 
-        
         c_voxels = torch.full((self.B, 18, 4), fill_value=-1, dtype=torch.long, device=self.grid.device)
         
-        assignments, c_voxels = assign_gt_to_voxels(assignments, c_voxels,
-                                                              self.grid, gtl, self.voxel_size, self.lb)
+        assignments, c_voxels = assign_gt_to_voxels(assignments, c_voxels, self.grid, gtl, self.voxel_size, self.lb)
+        # so we have 3d grid, all -1 except for voxels of a gt object which has the gt index
         
-        
-        # Removing out of the bound detections from ground truth
+        # Marking out of the bound objects from ground truth by zeroing the valid flag
+        # + marking the closest voxel to the center of out of the bound objects (the gt_idx will be -1)
         c_voxels, gtl = self._mark_oob_dets(c_voxels, gtl)
-        
+
+        # for each voxel which is out of the bound, the index will be -3
         for b in range(self.B):
             assignments[b][~self.oob_mask_valid] = -3
-        """
-        result will be:
-            1. assignment has no more voxels assigned to oob objects and all oob voxels are -3
-            2. c_voxels has all objects, but the gt index of oob ones is -1
-            3. gtl has all obejcts but the valid flag of oob ones is zzero now
-        """
-                    
+
+        # making the 3d space to BEV (priority index: -3, [indx >= 0], -2, -1)
         assignments_bev = aggregate_assignment(assignments)
         del assignments
-
-        self.tg_mask = assignments_bev >= 0
-        self.bg_mask = assignments_bev == -1
-        self.ign_mask = assignments_bev == -2
-        self.blind_mask = assignments_bev == -3
         
         # Objectness loss
         self.loss['obj_conf'] = self.object_conf_loss(prediction[:, self.num_c:self.num_c+1], assignments_bev)
