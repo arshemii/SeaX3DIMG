@@ -11,7 +11,7 @@
   
   * Modification of offset regression loss (why not including center voxel to the method?) ☑
   * Modification of dimension and yaw loss ☑
-  * A strict check on objects to avoid in gtl for gtl[-1] == 0
+  * A strict check on objects to avoid in gtl for gtl[-1] == 0 ☑
   * Why out of the boundary not be assigned to -3? why -1??? ☑
   * Modifying the architecture (change the voxel shape to conical! from small voxels near to coarse ones at far)
 
