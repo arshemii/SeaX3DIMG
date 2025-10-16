@@ -234,8 +234,8 @@ class loss_bev(nn.Module):
                 tg_classes = gtl[b, :, 12].clone()            # [18]
                 tg_classes[gtl[b, :, 13] == 0] = -100         # invalid (gtl tensor zero padding) or OoB
                 
-                voxel_obj_indices = assignments[b][obj_mask].long()  # [N]
-                target_tensor = tg_classes[voxel_obj_indices]        # [N]
+                voxel_obj_indices = assignments[b][obj_mask].long()         # [N]
+                target_tensor = tg_classes[voxel_obj_indices].long()        # [N]
                 
                 pred_voxels = pred_cls_logits[b].permute(1, 2, 0)[obj_mask]  # [N, num_classes]
                 
