@@ -7,32 +7,24 @@ Created on Thu Jun 26 21:14:47 2025
 """
 import torch.nn as nn
 import torch
-import numpy as np
 import math
     
 
 
-def assign_gt_to_voxels(assignments, c_voxels,
-                        grid, gtl, voxel_size,
-                        debug, ignore_class_id=-1):
+def assign_gt_to_voxels(assignments, c_voxels, grid, gtl, voxel_size, debug, ignore_class_id=-2):
     """
     Assigns ground truth objects to the 3D grid.
 
     Args:
-        assignments: Tensor of shape [B, W, H, D]
-        c_voxels: Tensor of shape [B, 18, 4]
-        
+        assignments: Tensor of shape [B, W, H, D] all filled by -1
+        c_voxels: Tensor of shape [B, 18, 4] all filled by -1
         grid: Tensor of shape [W, H, D, 3] representing voxel centers (x, y, z)
         gtl: Shape: (B, 18, 14)
         
-        Returns:
-            assignments: Tensor of shape [B, W, H, D] with:
-                - -1: background
-                - >= 0: index of gtl object
-                - -2: ignored (like tram)
-            c_voxels:Tensor of shape [B, 18, 4]:
-                for each object (dim=1) the i, j, k of the center of the voxel related to that object
-                as well as its object ID is written
+    Returns:
+        assignments: Tensor of shape [B, W, H, D] with:   [-1: background | >= 0: index of gtl object | 2: ignored]
+        c_voxels:Tensor of shape [B, 18, 4]:
+            for each object, the center voxel closest to the object center is defined. index of gt_idx is the same as assignment
     """
    
     B, max_objects, _ = gtl.shape
@@ -40,8 +32,7 @@ def assign_gt_to_voxels(assignments, c_voxels,
     device = grid.device
     
     for b in range(B):
-        if gtl[b, 0, 13] == 0:
-             # no object
+        if gtl[b, :, 13].sum() == 0:
              continue
         else:
             for obj_idx in range(max_objects):
@@ -80,7 +71,11 @@ def assign_gt_to_voxels(assignments, c_voxels,
                     min_idx = torch.argmin(dists)
                     idx_flat = torch.nonzero(inside, as_tuple=False)[min_idx]
                     i, j, k = idx_flat.tolist()
-                    c_voxels[b, obj_idx] = torch.tensor([i, j, k, obj_idx], device=device)
+                    
+                    if cat == ignore_class_id:
+                        c_voxels[b, obj_idx] = torch.tensor([i, j, k, -2], device=device)
+                    else:
+                        c_voxels[b, obj_idx] = torch.tensor([i, j, k, obj_idx], device=device)
 
     return assignments, c_voxels
 
@@ -137,8 +132,7 @@ class loss_bev(nn.Module):
         self.grid_bev = self._grid3d_to_grid2d()
         
         self.oob_mask_valid = oob_mask_valid
-        # oob_mask_valid is:
-        #    shape 100, 30, 70 and where the voxel is out of boundary of image --> False otherwise, True
+        # oob_mask_valid: [100, 30, 70], voxel is out of boundary of image --> False otherwise, True
         
         self.num_c = self.cfg.model.num_class
         self.loss_weights = self.cfg.loss.weight
@@ -154,30 +148,36 @@ class loss_bev(nn.Module):
         # bev_grid will be 100, 70, 2
         return bev_grid
     
-    def _mark_oob_dets(self, c_voxels, gtl):
+    def _mark_oo_FOV(self, assignments, c_voxels, gtl):
         """
         mark ground truth objects that fall outside the camera view.
         Args:
-            c_voxels: Tensor [B, 18, 4] (i, j, k, obj_idx)
-            gtl: Tensor [B, 18, 14] (object parameters)
+            assignments: [B, W, H, D]
+            c_voxels:    [B, 18, 4] (i, j, k, obj_idx)
+            gtl:         [B, 18, 14]
         Returns:
             All input arguments will be updated
         """
-        B, max_objects, _ = gtl.shape
+        _, max_objects, _ = gtl.shape
         
-        for b in range(B):
-            # No object condition:
+        for b in range(self.B):
+            assignments[b][~self.oob_mask_valid] = -3
+            
             if gtl[b, :, 13].sum() == 0:
                 continue
             
-            for i, j, k, gt_idx in c_voxels[b]:
+            for m in range(max_objects):
+                i, j, k, gt_idx = c_voxels[b, m, 0], c_voxels[b, m, 1], c_voxels[b, m, 2], c_voxels[b, m, 3]
                 if gt_idx >= 0:
+                    assert i >= 0 and j >= 0 and k >= 0
+                    # ignored object not necessary to check
                     if not self.oob_mask_valid[i, j, k]:
                         # i, j, k is out of the boundary
-                        c_voxels[b, c_voxels[b, :, 3] == gt_idx] = -1
-                        gtl[b, gt_idx, -1] = 0.0
+                        c_voxels[b, m, -1] = -3
+                        gtl[b, m, -1] = 0.0
+                        gtl[b, m, 12] = -3.0
                     
-        return c_voxels, gtl
+        return assignments, c_voxels, gtl
     
     def object_conf_loss(self, pred_obj_logits, assignments):
         """
@@ -217,8 +217,8 @@ class loss_bev(nn.Module):
         ** gtl --> for validity flag in gtl[:, :, 13]:
                         if flag is 1 --> valid
                         if flag is zero -->
-                                category in [:, :, 12] is -1 --> ignored object
-                                category in [:, :, 12] is not -1 --> Out of FOV objects
+                                category in [:, :, 12] is -2 --> ignored object
+                                category in [:, :, 12] is -3 --> Out of FOV objects
         """
         
         loss = []
@@ -228,17 +228,16 @@ class loss_bev(nn.Module):
             obj_mask = (assignments[b] >= 0)
             bg_mask = (assignments[b] == -1)
             
-            
             # Loss in valid voxels
             if obj_mask.any():
-                tg_classes = gtl[b, :, 12]
-                tg_classes_mask = (tg_classes != -1)
-                tg_classes[tg_classes == -1] = -100  # ignore invalid
+                # Prepare ground truth class labels
+                tg_classes = gtl[b, :, 12].clone()            # [18]
+                tg_classes[gtl[b, :, 13] == 0] = -100         # invalid (gtl tensor zero padding) or OoB
                 
-                voxel_obj_indices = assignments[b][valid_mask].long()  # [N_valid]
-                target_tensor = tg_classes[voxel_obj_indices]
+                voxel_obj_indices = assignments[b][obj_mask].long()  # [N]
+                target_tensor = tg_classes[voxel_obj_indices]        # [N]
                 
-                pred_voxels = pred_cls_logits[b].permute(1, 2, 0)[valid_mask]
+                pred_voxels = pred_cls_logits[b].permute(1, 2, 0)[obj_mask]  # [N, num_classes]
                 
                 ce = nn.functional.cross_entropy(pred_voxels, target_tensor, reduction='none', ignore_index=-100)
                 pt = torch.exp(-ce)
@@ -263,10 +262,12 @@ class loss_bev(nn.Module):
         
     def center_loss(self, pred_offsets, assignments, gtl, grid):
         """
-        pred_offsets: [B, 2, W, D]
-        assignments: [B, W, D]  (if H=1, can be squeezed)
-        gtl: [B, 18, 14] where gtl[b, :, 9:11] are (cx_off, cz_off)
-        grid: [W, D, 2] -> voxel centers (x, z)
+        The loss for center is calculated for each voxel that is assigned to a valid object
+        
+        pred_offsets:   [B, 2, W, D]
+        assignments:    [B, W, D]
+        gtl:            [B, 18, 14] --> gtl[b, :, 9:11] are (cx_off, cz_off)
+        grid:           [W, D, 2] -> (x, z)
         """
         loss = []
     
@@ -276,11 +277,10 @@ class loss_bev(nn.Module):
             if valid_mask.sum() == 0:
                 continue
     
-            # Flatten grid and mask
             i, k = torch.nonzero(valid_mask, as_tuple=True)  # (N,)
             gt_indices = assignments[b][i, k].long()  # (N,)
     
-            # voxel centers
+            # all voxel centers that are assigned to a gt index
             voxel_centers = grid[i, k, :].to(pred_offsets.device)   # (N, 2)
             # predicted offsets for valid voxels
             pred_offsets_valid = pred_offsets[b][:, i, k].permute(1, 0)  # (N, 2)
@@ -304,17 +304,18 @@ class loss_bev(nn.Module):
         
     def dimension_loss(self, pred_dims, center_voxels, gtl):
         """
-        pred_dims: [B, 2, W, D] - predicted (w, l)
-        center_voxels: [B, 18, 4] - (i, j, k, gt_idx)
-        gtl: [B, 18, 14] - GT info, w and l are at indices 7 and 8
+        Calculates loss for only and only for voxels that are closest to the object center (Dimension is constant for all voxels of an object)
+        
+        pred_dims:          [B, 2, W, D] --> (w, l)
+        center_voxels:      [B, 18, 4] --> (i, j, k, gt_idx)
+        gtl:                [B, 18, 14] --> gtl[b, :, 7:9] are (w, l)
         """
         loss = []
-        B = pred_dims.shape[0]
         
-        for b in range(B):
+        for b in range(self.B):
             cv = center_voxels[b]  # [18, 4]
             gt_indices = cv[:, 3].long()  # [18]
-            valid_mask = (gt_indices >= 0) & (gtl[b, gt_indices, -1] == 1)  # present and valid objects
+            valid_mask = (gt_indices >= 0) & (gtl[b, gt_indices.clamp_min(0), 13] == 1)
             
             if not valid_mask.any():
                 continue
@@ -339,9 +340,11 @@ class loss_bev(nn.Module):
         
     def yaw_loss(self, pred_yaw, center_voxels, gtl):
         """
-        pred_yaw: [B, 1, W, D]
-        center_voxels: [B, 18, 4]  (i, j, k, gt_idx)
-        gtl: [B, 18, 14]  (gtl[..., 11] = yaw)
+        Calculates loss for only and only for voxels that are closest to the object center
+        
+        pred_yaw:           [B, 1, W, D]
+        center_voxels:      [B, 18, 4] --> (i, j, k, gt_idx)
+        gtl:                [B, 18, 14] --> gtl[..., 11] = yaw
         """
         loss_terms = []
     
@@ -367,9 +370,7 @@ class loss_bev(nn.Module):
             diff = (pred_vals - gt_vals + math.pi) % (2 * math.pi) - math.pi
     
             # Smooth L1 over differences
-            loss = nn.functional.smooth_l1_loss(
-                diff, torch.zeros_like(diff), reduction='mean', beta=self.beta
-            )
+            loss = nn.functional.smooth_l1_loss(diff, torch.zeros_like(diff), reduction='mean', beta=self.beta)
             loss_terms.append(loss)
     
         if len(loss_terms) == 0:
@@ -418,11 +419,7 @@ class loss_bev(nn.Module):
         
         # Marking out of the bound objects from ground truth by zeroing the valid flag
         # + marking the closest voxel to the center of out of the bound objects (the gt_idx will be -1)
-        c_voxels, gtl = self._mark_oob_dets(c_voxels, gtl)
-
-        # for each voxel which is out of the bound, the index will be -3
-        for b in range(self.B):
-            assignments[b][~self.oob_mask_valid] = -3
+        assignments, c_voxels, gtl = self._mark_oo_FOV(assignments, c_voxels, gtl)
 
         # making the 3d space to BEV (priority index: -3, [indx >= 0], -2, -1)
         assignments_bev = aggregate_assignment(assignments)

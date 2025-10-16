@@ -159,7 +159,7 @@ def config_generator():
                             "FINAL_CONV_KERNEL": 1}]
 
 
-    cfg.loss.weight = [1.0, 1.0, 0.15, 0.05, 0.2]
+    cfg.loss.weight = [1.0, 1.0, 0.75, 0.65, 0.2]
     cfg.loss.alpha = 0.25
     cfg.loss.gamma = 2.0
     cfg.loss.beta = 1.0
