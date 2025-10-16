@@ -77,14 +77,16 @@ def training(cfg):
 
     loss_fn = loss_bev(cfg, grid, oob_mask_valid)
             
-    if cfg.model.head == 'box2d':
+    if cfg.model.head == 'bev_box':
         if len(os.listdir(cfg.model.sx3d.checkpoint_bev)) == 0:
             resume_checkpoint = None
         else:
             resume_checkpoint = max(glob.glob("./checkpoints_bev/checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
             print(f"Start training with {resume_checkpoint}")
+    elif cfg.model.head == 'bev_occupancy':
+        raise NotImplementedError("Only bev_box can be selected now")
     else:
-        raise NotImplementedError("Only 'box2d' is predicted in this branch.")
+        raise NotImplementedError("Only 'box2d' and bev_occupancy' are available!")
         
     
     trainer = Trainer(cfg, model, dataset, collate_fn,
