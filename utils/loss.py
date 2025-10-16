@@ -449,9 +449,6 @@ class loss_bev(nn.Module):
                                 self.loss_weights[2]*self.loss['center_loss'] + \
                                 self.loss_weights[3]*self.loss['dim_loss'] + \
                                 self.loss_weights[4]*self.loss['yaw_angle_loss']
-                                
-        if self.lb:
-            print("-------------------- loss forward ended--------------------")
-            
+                                  
         return self.loss
     
