@@ -35,7 +35,7 @@ class Trainer:
         self.model = model.to(self.device)
         self.dataset = dataset
         self.collate_fn = collate_fn
-        self.num_epochs = self.cfg.dev.num_epochs
+        self.num_epochs = self.cfg.dev.num_epoch
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.scheduler = scheduler
