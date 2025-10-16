@@ -11,7 +11,7 @@ import math
     
 
 
-def assign_gt_to_voxels(assignments, c_voxels, grid, gtl, voxel_size, debug, ignore_class_id=-2):
+def assign_gt_to_voxels(assignments, c_voxels, grid, gtl, voxel_size, ignore_class_id=-2):
     """
     Assigns ground truth objects to the 3D grid.
 
@@ -414,7 +414,7 @@ class loss_bev(nn.Module):
 
         c_voxels = torch.full((self.B, 18, 4), fill_value=-1, dtype=torch.long, device=self.grid.device)
         
-        assignments, c_voxels = assign_gt_to_voxels(assignments, c_voxels, self.grid, gtl, self.voxel_size, self.lb)
+        assignments, c_voxels = assign_gt_to_voxels(assignments, c_voxels, self.grid, gtl, self.voxel_size)
         # so we have 3d grid, all -1 except for voxels of a gt object which has the gt index
         
         # Marking out of the bound objects from ground truth by zeroing the valid flag
@@ -441,8 +441,6 @@ class loss_bev(nn.Module):
                                        c_voxels, gtl)
         
         # yaw angle loss
-        # Any normalization on each term? No, just weights
-        assert prediction[:, self.num_c+5:].shape[1] == 1
         self.loss['yaw_angle_loss'] = self.yaw_loss(prediction[:, self.num_c+5:], c_voxels, gtl)
 
         # Total loss: Sum of all loss considering their importance based on self.loss_weights
