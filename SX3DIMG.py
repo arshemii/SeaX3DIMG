@@ -222,9 +222,9 @@ class SX3DIMG(nn.Module):
         
         if self.debug:
             print("==> Detection head started")
-        if self.cfg.model.head == 'box2d':
+        if self.cfg.model.head == 'bev_box':
             out = self.head(voxel)
-        elif self.cfg.model.head == 'box3d':
+        elif self.cfg.model.head == 'bev_occupancy':
             out = self.head(voxel)
         else:
             raise NotImplementedError("other representation ehad methods!")
