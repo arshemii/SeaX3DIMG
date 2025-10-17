@@ -139,7 +139,7 @@ class Trainer:
         for epoch in range(self.start_epoch, self.start_epoch + self.num_epochs):
             start_time = time.time()
             
-            avg_loss, _ = self.train_epoch(epoch)
+            avg_loss = self.train_epoch(epoch)
             
             train_time = time.time() - start_time
             
