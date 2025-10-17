@@ -42,9 +42,9 @@ def assign_gt_to_voxels(assignments, c_voxels, grid, gtl, voxel_size, ignore_cla
                     cat = int(gtl[b, obj_idx, 12])
         
                     # if object is smaller than an edge of the voxel:
-                    w = max(w, voxel_size[0])
-                    h = max(h, voxel_size[1])
-                    l = max(l, voxel_size[2])
+                    w = torch.maximum(w, torch.tensor(voxel_size[0] * 1.02, device=w.device, dtype=w.dtype))
+                    h = torch.maximum(h, torch.tensor(voxel_size[1] * 1.02, device=h.device, dtype=h.dtype))
+                    l = torch.maximum(l, torch.tensor(voxel_size[2] * 1.02, device=l.device, dtype=l.dtype))
         
                     # AABB
                     x_min, x_max = cx - w / 2, cx + w / 2
