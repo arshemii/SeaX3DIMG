@@ -14,3 +14,4 @@
 * Change the calculation of evaluation module
 * Increase the grid resolution
 * Produce assignment and nearest voxel centers to the dataset module
+* Change the head aggregation
