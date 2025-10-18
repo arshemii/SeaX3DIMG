@@ -11,16 +11,6 @@ import torch.nn.functional as F
 import math
 import functools
 
-# def hyp_up(hyp, scale=1, tile_scale=1):
-#     if scale != 1:
-#         d = disp_up(hyp[:, :1], hyp[:, 1:2], hyp[:, 2:3], scale, tile_expand=False)
-#         p = F.interpolate(hyp[:, 1:], scale_factor=scale)
-#         hyp = torch.cat((d, p), dim=1)
-#     if tile_scale != 1:
-#         d = disp_up(hyp[:, :1], hyp[:, 1:2], hyp[:, 2:3], tile_scale, tile_expand=True)
-#         p = F.interpolate(hyp[:, 1:], scale_factor=tile_scale)
-#         hyp = torch.cat((d, p), dim=1)
-#     return hyp
 
 def make_cost_volume_v2(left, right, max_disp):
     d_range = torch.arange(max_disp, device=left.device)
@@ -228,28 +218,3 @@ class Level(nn.Module):
             h = torch.where(w0 > w1, h0, h1)
             return h, cv, hi[:, :1], [[w0, h0[:, :1]], [w1, h1[:, :1]]]\
         
-        
-# class Refine(nn.Module):
-#     def __init__(self, cin, cres, dilations):
-#         super().__init__()
-#         self.conv1x1 = nn.Sequential(
-#             nn.Conv2d(cin + 16, cres, 1),
-#             nn.LeakyReLU(0.2),
-#         )
-#         self.conv1 = nn.Sequential(
-#             nn.Conv2d(cres, cres, 3, 1, 1),
-#             nn.LeakyReLU(0.2),
-#         )
-#         self.res_block = []
-#         for d in dilations:
-#             self.res_block += [ResBlock(cres, d)]
-#         self.res_block = nn.Sequential(*self.res_block)
-#         self.convn = nn.Conv2d(cres, 16, 3, 1, 1)
-
-#     def forward(self, hpy, left):
-#         x = torch.cat((left, hpy), dim=1)
-#         x = self.conv1x1(x)
-#         x = self.conv1(x)
-#         x = self.res_block(x)
-#         x = self.convn(x)
-#         return hpy + x
