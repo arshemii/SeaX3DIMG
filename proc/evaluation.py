@@ -6,7 +6,6 @@ Created on Sat Oct  4 18:56:11 2025
 @author: arash
 """
 
-# evaluator.py
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -16,21 +15,6 @@ from collections import defaultdict
 import utils.eval_utils as eu
 
 class Evaluate:
-    """
-    Evaluation helper that:
-      - prepares predictions (sigmoid/softmax -> compress -> add voxel centers -> filter),
-      - runs Hungarian matching per-sample for counting TP/FP/FN per IoU threshold (class-aware),
-      - builds per-class detections and GTs and computes AP (per IoU),
-      - returns per-class stats and mAP per IoU.
-    Config expectations (self.cfg.eval):
-      - objectness_threshold: float
-      - range_limit: float or None
-      - iou_list: list of IoU thresholds (e.g. [0.5])
-      - num_batch: number of samples per batch tensor
-      - require_class_match: bool (True forces predicted class == GT class to count TP)
-      - match_cost_dist (unused here; Hungarian uses IoU + optional class constraint)
-    """
-
     def __init__(self, cfg, prediction_batches, gt_all_batches, grid, oob_mask_valid):
         """
         prediction_batches: list of batch tensors; each tensor shaped [B, 10, W, D] (CPU or GPU)
@@ -50,9 +34,6 @@ class Evaluate:
         bev_grid = eu.grid3d_to_grid2d(grid)
         self.grid = bev_grid.cpu() if isinstance(bev_grid, torch.Tensor) else bev_grid
 
-    # -------------------------
-    # Prediction / GT helpers
-    # -------------------------
     def _pred_preparation(self, batch_preds):
         """
         Input:
@@ -163,9 +144,6 @@ class Evaluate:
     
         return matches, unmatched_preds, unmatched_gts
 
-    # -------------------------
-    # Utility: compute AP for one class across dataset (greedy score-based matching)
-    # -------------------------
     def _compute_ap_for_class(self, detections, gt_by_image, iou_th):
         """
         Args:
