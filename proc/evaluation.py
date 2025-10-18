@@ -31,7 +31,7 @@ class Evaluate:
       - match_cost_dist (unused here; Hungarian uses IoU + optional class constraint)
     """
 
-    def __init__(self, cfg, prediction_batches, gt_all_batches, grid):
+    def __init__(self, cfg, prediction_batches, gt_all_batches, grid, oob_mask_valid):
         """
         prediction_batches: list of batch tensors; each tensor shaped [B, 10, W, D] (CPU or GPU)
         gt_all_batches: list parallel to prediction_batches; each item is a list of length B,
@@ -41,9 +41,12 @@ class Evaluate:
         self.cfg = cfg
         self.prediction_batches = prediction_batches
         self.gt_all_batches = gt_all_batches
+        self.num_c = self.cfg.model.num_class
+        self.oo_fov = oob_mask_valid.cpu()
 
         # convert 3D grid -> BEV xy centers [W, D, 2]
         # NOTE: keep grid on CPU because eu.bev_iou uses shapely (CPU)
+        self.grid_3d = grid.cpu()
         bev_grid = eu.grid3d_to_grid2d(grid)
         self.grid = bev_grid.cpu() if isinstance(bev_grid, torch.Tensor) else bev_grid
 
@@ -54,7 +57,7 @@ class Evaluate:
         """
         Input:
             batch_preds: tensor [B, 10, W, D] (logits):
-                Order in second dim: Objectness, cl1, cl2, cl3, cl4, cx_offset, cz_offset, w, l, yaw
+                Order in second dim: cl1, cl2, cl3, cl4, Objectness, cx_offset, cz_offset, w, l, yaw
         Output:
             preds_list: python list length B, each element is tensor [N, 8] detections:
                 Order in second dim: objectness, class_idx, class_prob, cx_abs, cz_abs, w, l, yaw
@@ -65,13 +68,14 @@ class Evaluate:
         preds = preds.to(self.cfg.eval.eval_device[0])
 
         # objectness -> sigmoid
-        preds[:, 0, :, :] = torch.sigmoid(preds[:, 0, :, :])
+        preds[:, self.num_c:self.num_c+1, :, :] = torch.sigmoid(preds[:, self.num_c:self.num_c+1, :, :])
 
         # class logits [1:5]
-        preds[:, 1:5, :, :] = torch.softmax(preds[:, 1:5, :, :], dim=1)
+        preds[:, 1:5, :, :] = torch.softmax(preds[:, 0:self.num_c, :, :], dim=1)
 
         # compress: [B,10,W,D] -> [B,8,W,D]
-        preds = eu.compress_tensor(preds)
+        preds = eu.compress_tensor(preds, self.num_c)
+        # oder: objectness, class_idx, class_prob, regressed
 
         # add absolute voxel centers (grid must be [W,D,2])
         preds = eu.add_voxel_centers(preds, self.grid)
@@ -92,61 +96,57 @@ class Evaluate:
         Output:
             prepared_gt: same shape, but optionally filtered by range_limit
         """
-        # remove gt with label -1
-        new_batch_gt = []
-        for sp in batch_gt:
-            new_sp = []
-            for gt in sp:
-                if int(gt['category']) != -1:
-                    new_sp.append(gt)
-            new_batch_gt.append(new_sp)
+        batch_gt = eu.mark_nonvalid_obj(self.grid_3d, batch_gt, self.oo_fov, self.cfg.grid_unc)
+        # all oo fov and ignored are marked as invalid
         
         if self.cfg.eval.range_limit:
-            return eu.drop_far_gts(new_batch_gt, self.cfg.eval.range)
-        return new_batch_gt
+            return eu.mark_far_gts(batch_gt, self.cfg.eval.range)
+        return batch_gt
 
 
-    def hungarian_matching(self, preds: torch.Tensor, gt_list: list, iou_threshold: float):
+    def hungarian_matching(self, preds: torch.Tensor, gt_valid: torch.Tensor, iou_threshold: float):
         """
-        preds: tensor [N,8] (objectness, class_idx (float), class_prob, cx, cz, w, l, yaw)
-        gt_list: list of gt dicts for this sample; each gt contains 'bbox_bev' (w,l,cx,cz,yaw) and 'category'
+        preds: [N, 8]  (objectness, class_idx, class_prob, cx, cz, w, l, yaw)
+        gt_tensor: [num_objects, 14]  (includes padding; only valid if gt_tensor[:, -1] == 1)
+           - bbox fields: gt_tensor[:, 7:12] -> (w, l, cx, cz, yaw)
+           - category: gt_tensor[:, 12]
+           - flag: gt_tensor[:, -1] == 1.0 means valid object
+    
         Returns:
-            matches: list of (pred_idx, gt_idx) (indices relative to preds / gt_list)
+            matches: list of (pred_idx, gt_idx)
             unmatched_pred_indices: list of pred indices
             unmatched_gt_indices: list of gt indices
-        Behavior:
-            - builds IoU matrix IoUs[N, M] between pred boxes (cols 3:8) and each gt
-            - builds cost = 1 - IoU
-            - optionally forbids class-mismatched pairs by adding a large cost
-            - runs Hungarian and keeps only matches with IoU >= iou_threshold and (class ok if required)
         """
         N = len(preds)
-        M = len(gt_list)
-
-        # early returns
+        M = len(gt_valid)
+    
+        # Early return if no predictions or no ground truth
         if N == 0 or M == 0:
             return [], list(range(N)), list(range(M))
-
-        device = self.cfg.eval.eval_device[0]  # eu.bev_iou and shapely use CPU
+    
+        device = preds.device
         dtype = torch.float32
-
+    
         IoUs = torch.zeros((N, M), dtype=dtype, device=device)
-
-        # preds boxes: cx, cz, w, l, yaw
+    
+        # Prediction boxes: [cx, cz, w, l, yaw]
         pred_boxes = preds[:, 3:8].to(device, dtype=dtype)
-
-        for m, gt in enumerate(gt_list):
-            # reorder GT from [w, l, cx, cz, yaw] to [cx, cz, w, l, yaw]
-            gt_bbox = torch.tensor(gt['bbox_bev'], dtype=dtype, device=device)[[2, 3, 0, 1, 4]]
-            IoUs[:, m] = eu.bev_iou(pred_boxes, gt_bbox)
-
-        # cost matrix for Hungarian: minimize cost -> use 1 - IoU
+    
+        # GT boxes: reorder from [w, l, cx, cz, yaw] to [cx, cz, w, l, yaw]
+        gt_boxes = gt_valid[:, 7:12][:, [2, 3, 0, 1, 4]].to(device, dtype=dtype)
+    
+        # Compute IoU for all pairs (pred, gt)
+        for m in range(M):
+            gt_box = gt_boxes[m]
+            IoUs[:, m] = eu.bev_iou(pred_boxes, gt_box)
+    
+        # Cost = 1 - IoU
         cost = (1.0 - IoUs).cpu().numpy()
-
-        # Hungarian solve
+    
+        # Solve Hungarian
         pred_indices, gt_indices = linear_sum_assignment(cost)
-
-        # keep only pairs with IoU >= threshold
+    
+        # Filter matches by IoU threshold
         matches = []
         matched_pred_set = set()
         matched_gt_set = set()
@@ -154,14 +154,13 @@ class Evaluate:
             iou_val = float(IoUs[p, g].item())
             if iou_val < iou_threshold:
                 continue
-    
             matches.append((int(p), int(g)))
             matched_pred_set.add(int(p))
             matched_gt_set.add(int(g))
-
+    
         unmatched_preds = [i for i in range(N) if i not in matched_pred_set]
         unmatched_gts = [j for j in range(M) if j not in matched_gt_set]
-
+    
         return matches, unmatched_preds, unmatched_gts
 
     # -------------------------
@@ -260,7 +259,7 @@ class Evaluate:
         """
         iou_list = self.cfg.eval.iou_list # default is: [0.10, 0.25, 0.50, 0.75, 0.90]
 
-        class_ids = list(range(self.cfg.model.num_class))  # assume cfg.num_classes present
+        class_ids = list(range(self.cfg.model.num_class))
         metrics_per_iou = {iou: {'per_class_counts': {c: {'TP': 0, 'FP': 0, 'FN': 0} for c in class_ids},
                                  'detections_by_class': {c: [] for c in class_ids},
                                  'gt_by_class': {c: defaultdict(list) for c in class_ids}}
@@ -277,12 +276,14 @@ class Evaluate:
             
             # prepare batch-level preds and gts
             prepared_preds_list = self._pred_preparation(batch_preds)  # list length B of [N,8] tensors
-            prepared_gt_list = self._gt_preparation(batch_gts)  # list length B of lists of gt dicts
+            prepared_gt_list = self._gt_preparation(batch_gts)  # list length B of tensors B, 18, 14
 
             # iterate samples in this batch
             for sample_idx in range(self.cfg.num_batch):
                 preds = prepared_preds_list[sample_idx]  # [N,8] or empty tensor (0,8)
-                gts = prepared_gt_list[sample_idx]       # list of gt dicts
+                gts_full = prepared_gt_list[sample_idx]       # tensor 18, 14
+                valid_mask = gts_full[:, -1] == 1.0
+                gts = gts_full[valid_mask]
 
                 # For each IoU threshold, run class-aware Hungarian to get TP/FP/FN per class
                 for iou_th in iou_list:
@@ -291,7 +292,7 @@ class Evaluate:
 
                     # Count matches per class (TP)
                     for p_idx, g_idx in matches:
-                        gt_cls = int(gts[g_idx]['category'])
+                        gt_cls = int(gts[g_idx][-2])
                         pred_cls = int(preds[p_idx, 1].item())
                         if pred_cls == gt_cls:
                             metrics_per_iou[iou_th]['per_class_counts'][gt_cls]['TP'] += 1
@@ -308,7 +309,7 @@ class Evaluate:
 
                     # Unmatched gts -> FN per gt class
                     for g_idx in unmatched_gt_idx:
-                        gt_cls = int(gts[g_idx]['category'])
+                        gt_cls = int(gts[g_idx][-2])
                         metrics_per_iou[iou_th]['per_class_counts'][gt_cls]['FN'] += 1
 
                 # Collect detections and GTs (for AP computation) across IoUs (AP computed per IoU later)
@@ -322,9 +323,9 @@ class Evaluate:
                         for iou_th in iou_list:
                             metrics_per_iou[iou_th]['detections_by_class'][c].append(entry)
 
-                for g_idx, gt in enumerate(gts):
-                    c = int(gt['category'])
-                    bbox_bev = gt['bbox_bev']
+                for g_idx in range(len(gts)):
+                    c = int(gts[g_idx][-2])
+                    bbox_bev = gts[g_idx][7:12]
                     bbox_reordered = [bbox_bev[2], bbox_bev[3], bbox_bev[0], bbox_bev[1], bbox_bev[4]]
                     for iou_th in iou_list:
                         metrics_per_iou[iou_th]['gt_by_class'][c][global_image_id].append(bbox_reordered)
@@ -365,7 +366,7 @@ class Evaluate:
         return results
 
 
-def evaluate_model(model, dataset, collate_fn, grid, cfg, debug = False):
+def evaluate_model(model, dataset, oob_mask_valid, collate_fn, grid, cfg, debug = False):
     
     device_p = cfg.device[0] # prediction device
     device_e = cfg.eval.eval_device[0] # evaluation device
@@ -404,7 +405,7 @@ def evaluate_model(model, dataset, collate_fn, grid, cfg, debug = False):
         torch.cuda.empty_cache()
 
     
-    evaluator = Evaluate(cfg, predictions, gt_all, grid)
+    evaluator = Evaluate(cfg, predictions, gt_all, grid, oob_mask_valid)
     results = evaluator.evaluate()
     
     return results

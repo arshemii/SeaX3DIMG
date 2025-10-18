@@ -109,8 +109,11 @@ def evaluation(cfg):
         glob.glob(os.path.join(checkpoint_dir, "checkpoint_epoch_*.pth")),
         key=lambda x: int(re.search(r"checkpoint_epoch_(\d+).pth", x).group(1)))
     
+    print(f"Latest checkpoint to start is: {checkpoint_dir}")
+    
     model = get_SX3D_model(cfg)
-    model = model.to(cfg.device[0]) 
+    model = model.to(cfg.device[0])
+    oob_mask_valid = model.return_boundary_mask()
     checkpoint = torch.load(latest_ckpt, map_location = cfg.device[0])
     model.load_state_dict(checkpoint['model_state'])
     model.eval()
@@ -119,7 +122,7 @@ def evaluation(cfg):
     grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc, cfg.H_off) # points in cam coordinates
     grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32).permute(1,2,3,0)
     
-    results = evaluate_model(model, dataset, collate_fn, grid, cfg, debug = False)
+    results = evaluate_model(model, dataset, oob_mask_valid, collate_fn, grid, cfg, debug = cfg.eval.debug)
     
     eval_range = cfg.eval.range if cfg.eval.range_limit else 90.0
     

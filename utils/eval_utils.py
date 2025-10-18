@@ -73,7 +73,7 @@ def bev_iou(dets: torch.Tensor, gt: torch.Tensor) -> torch.Tensor:
 
 
 
-def compress_tensor(tensor):
+def compress_tensor(tensor, number_c):
     """
     tensor: [B, 10, W, D]
     returns: [B, 8, W, D]
@@ -84,10 +84,10 @@ def compress_tensor(tensor):
     assert C == 10, "Input tensor must have 10 channels, same as the model output"
 
     # Objectness
-    objectness = tensor[:, 0:1, :, :]  # [B,1,W,D]
+    objectness = tensor[:, number_c:number_c+1, :, :]  # [B,1,W,D]
 
     # Class predictions
-    class_logits = tensor[:, 1:5, :, :]                # [B,4,W,D]
+    class_logits = tensor[:, 0:number_c, :, :]                # [B,4,W,D]
     class_prob, class_idx = torch.max(class_logits, 1) # [B,W,D], [B,W,D]
 
     # Expand dims for stacking
@@ -184,30 +184,76 @@ def drop_far_dets(dets_list, Z_threshold):
 
     return new_dets_list
 
-def drop_far_gts(gt_labels, Z_threshold):
+def mark_far_gts(gt_labels, Z_threshold):
     """
     Filter GT labels by Z threshold, and keep only bbox_bev and category.
 
-    Args:
-        gt_labels: list of length B
-            Each element is a list of dicts with keys:
-                'category', 'bbox3d', 'bbox_bev'
-        Z_threshold: float, max allowed cz (forward distance)
-
-    Returns:
-        filtered_gt: list of length B
-            Each element is a list of dicts with keys:
-                'category', 'bbox_bev'
     """
-    filtered_gt = []
-    for batch_gts in gt_labels:
-        batch_result = []
-        for gt in batch_gts:
-            cz = gt['bbox_bev'][3]  # bbox_bev = [w, l, cx, cz, yaw]
-            if cz <= Z_threshold:
-                batch_result.append({
-                    'category': gt['category'],
-                    'bbox_bev': gt['bbox_bev']
-                })
-        filtered_gt.append(batch_result)
-    return filtered_gt
+    B, max_objects, _ = gt_labels.shape
+    
+    for b in range(B):
+        if gt_labels[b, :, 13].sum() == 0:
+             continue
+        else:
+             for obj_idx in range(max_objects):
+                 if int(gt_labels[b, obj_idx, 13]) == 1:
+                     if gt_labels[b, obj_idx, 10] <= Z_threshold:
+                         gt_labels[b, obj_idx, -1] = 0.0
+                         gt_labels[b, obj_idx, 12] = -3.0
+    return gt_labels
+
+
+
+def mark_nonvalid_obj(grid, gtl, oob_mask, voxel_size, ignore_class_id=-2):
+    """
+    Mark all ignored objects and out of FOV ones by zeroing valid flag
+    """
+   
+    B, max_objects, _ = gtl.shape
+    W, H, D = grid.shape[:3]
+    device = grid.device
+    
+    for b in range(B):
+        if gtl[b, :, 13].sum() == 0:
+             continue
+        else:
+            for obj_idx in range(max_objects):
+                if int(gtl[b, obj_idx, 13]) == 1:
+                    h, w, l = gtl[b, obj_idx, 0:3]
+                    cx, cy, cz = gtl[b, obj_idx, 3:6]
+                    cat = int(gtl[b, obj_idx, 12])
+        
+                    # if object is smaller than an edge of the voxel:
+                    w = torch.maximum(w, torch.tensor(voxel_size[0] * 1.02, device=w.device, dtype=w.dtype))
+                    h = torch.maximum(h, torch.tensor(voxel_size[1] * 1.02, device=h.device, dtype=h.dtype))
+                    l = torch.maximum(l, torch.tensor(voxel_size[2] * 1.02, device=l.device, dtype=l.dtype))
+        
+                    # AABB
+                    x_min, x_max = cx - w / 2, cx + w / 2
+                    y_min, y_max = cy - h / 2, cy + h / 2
+                    z_min, z_max = cz - l / 2, cz + l / 2
+        
+                    # mask voxels inside this object
+                    xs, ys, zs = grid[..., 0], grid[..., 1], grid[..., 2]
+                    inside = (xs >= x_min) & (xs <= x_max) & \
+                             (ys >= y_min) & (ys <= y_max) & \
+                             (zs >= z_min) & (zs <= z_max)
+        
+                    assert inside.sum() != 0
+        
+        
+                    # find voxel closest to GT center
+                    voxel_coords = grid[inside]
+                    dists = torch.norm(voxel_coords - gtl[b, obj_idx, 3:6].to(device), dim=1)
+                    min_idx = torch.argmin(dists)
+                    idx_flat = torch.nonzero(inside, as_tuple=False)[min_idx]
+                    i, j, k = idx_flat.tolist()
+                    
+                    if not oob_mask[i, j, k]:
+                        gtl[b, obj_idx, -1] = 0.0
+                        gtl[b, obj_idx, 12] = -3.0
+                    
+                    if cat == -2:
+                        gtl[b, obj_idx, -1] = 0.0
+
+    return gtl

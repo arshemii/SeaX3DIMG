@@ -168,6 +168,7 @@ def config_generator():
     
 
     cfg.eval.save_dir = './eval_dir/'
+    cfg.eval.debug = True
     cfg.eval.iou_list = [0.10, 0.25, 0.50, 0.75, 0.90]
     cfg.eval.objectness_threshold = 0.5
     cfg.eval.range_limit = False
