@@ -15,5 +15,6 @@
 * Increase the grid resolution
 * Produce assignment and nearest voxel centers to the dataset module
 * Change the head aggregation
+* Why zeroing out of bound?
 * Check if memory is necessary!
-* Change left and right matrching to a less complex method
+* Change left and right mattching to a less complex method or a full disparity
