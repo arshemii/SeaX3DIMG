@@ -16,3 +16,4 @@
 * Produce assignment and nearest voxel centers to the dataset module
 * Change the head aggregation
 * Check if memory is necessary!
+* Change left and right matrching to a less complex method
