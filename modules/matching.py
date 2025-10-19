@@ -119,48 +119,82 @@ class ResBlock(nn.Module):
         x = self.relu(x)
         return x
 
+
+
 class LevelInit(nn.Module):
     def __init__(self, cin, max_disp, cref=16):
         super(LevelInit, self).__init__()
         self.max_disp = max_disp
-        self.conv_reduce = nn.Conv2d(cin, 16, 4)
+        # reduce left features (same reduction pattern you used)
+        self.conv_reduce = nn.Conv2d(cin, 16, kernel_size=4, stride=4)
         self.conv_em = nn.Sequential(
             nn.LeakyReLU(0.2),
             nn.Conv2d(16, 16, 1),
             nn.LeakyReLU(0.2),
         )
+        # hypothesis extractor (kept similar)
         self.conv_hyp = nn.Sequential(
             nn.Conv2d(cref + 1, 13, 1),
             nn.LeakyReLU(0.2),
         )
+        # cost refinement: small 3D conv block to smooth cost volume
+        # input 1 channel (L1-norm cost), output 1 channel refined cost
+        self.cost_refine = nn.Sequential(
+            nn.Conv3d(1, 8, kernel_size=3, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.Conv3d(8, 8, kernel_size=3, padding=1),
+            nn.LeakyReLU(0.2),
+            nn.Conv3d(8, 1, kernel_size=3, padding=1),
+        )
 
     def forward(self, l, r, ref=None):
+        # l: (B, cin, H, W)  r: (B, cin, H, W)
         lt = F.conv2d(l, self.conv_reduce.weight, self.conv_reduce.bias, stride=(4, 4))
         lt = self.conv_em(lt)
 
-        rt = same_padding_conv(r, self.conv_reduce.weight, self.conv_reduce.bias, s=(4, 1))
+        # same_padding_conv behavior replaced by explicit padding conv2d to match earlier code:
+        # replicate same behavior: downsample r in height but not width (stride=(4,1) + pad)
+        # we emulate your same_padding_conv by explicit padding calculation
+        # pad for stride (4,1) with kernel 4x4
+        pad_h = (4 - 1) // 2
+        pad_w = (4 - 1) // 2
+        rt = F.pad(r, (pad_w, pad_w, pad_h, pad_h))
+        rt = F.conv2d(rt, self.conv_reduce.weight, self.conv_reduce.bias, stride=(4, 1))
         rt = self.conv_em(rt)
-        """
-        left feature map is downsampled to 1/4 in 1/4 but right to 1/4 in 1 (width the same)
-        then, corresponding points from w width level of right feature map are sampled and w/4 points are gathered
-        Output cv is a (1, 16, disparity_level, h/4, w/4) showing that for each channel, each point has n(disparity_level) feature by subtracting
-        left feature by disparity-shifted rigth feature map
-        """
 
-        cv = make_cost_volume_v2(lt, rt, self.max_disp)
-        cv = torch.norm(cv, p=1, dim=1) # L1 norm along disparity --> (1, disparity_level, h/4, w/4)
-        cv_min, d = torch.min(cv, dim=1, keepdim=True)
-        d = d.float() # at each pixel which disparity level (index) is minimum
+        # cost volume: (B, D, H4, W4)
+        cv = make_cost_volume_v2(lt, rt, self.max_disp)  # (B, C, D, H4, W4) with C = channels difference
+        # collapse channel difference to cost per disparity by L1-norm across feature channels
+        cv = torch.norm(cv, p=1, dim=1, keepdim=True)  # (B, 1, D, H4, W4)
+
+        # refine with 3D conv
+        cv_refined = self.cost_refine(cv)  # (B, 1, D, H4, W4)
+        cv_ref = cv_refined.squeeze(1)     # (B, D, H4, W4)
+
+        # soft-argmin for differentiable disparity (subpixel)
+        # convert costs to negative log-likelihood style: lower cost -> higher prob
+        prob = torch.softmax(-cv_ref, dim=1)  # (B, D, H4, W4)
+
+        disp_levels = torch.arange(self.max_disp, dtype=cv_ref.dtype, device=cv_ref.device).view(1, -1, 1, 1)
+        disp = torch.sum(prob * disp_levels, dim=1, keepdim=True)  # (B,1,H4,W4) subpixel disparity index
+
+        # confidence: use negative entropy (higher -> more confident)
+        entropy = -torch.sum(prob * torch.log(prob + 1e-8), dim=1, keepdim=True)  # (B,1,H4,W4)
+        # normalize confidence into [0,1] by a small squashing (optional)
+        conf = torch.sigmoid((1.0 - entropy))  # (B,1,H4,W4) -- higher for less entropy
 
         if ref is None:
             ref = lt
-        p = torch.cat((cv_min, ref), dim=1) # must be the main fature + min disparity with c_in + 1 channels (1, 16 + 1, h/4, w/4)
-        p = self.conv_hyp(p) # (1, 13, h/4, w/4)
-        p = torch.cat((d, torch.zeros_like(d), torch.zeros_like(d), p), dim=1)
-        # P is some features extracted
-        # cv is the disparity
-        # p and cv has the same shape (1, 16, h/4, w/4)
-        return p, cv
+        # preserve previous behavior: p = concat(cv_min/ref) but now use cv_min as min cost across disparity
+        cv_min, _ = torch.min(cv_ref, dim=1, keepdim=True)
+        p = torch.cat((cv_min, ref), dim=1)  # (B, 1 + 16, H4, W4)
+        p = self.conv_hyp(p)  # (B, 13, H4, W4)
+        # pack disp as first 3 channels in a small style to match old interface: [d, 0, 0] + p
+        d_pad = torch.cat([disp, torch.zeros_like(disp), torch.zeros_like(disp)], dim=1)  # (B,3,H4,W4)
+        p_out = torch.cat((d_pad, p), dim=1)  # (B, 3+13, H4, W4)
+        # return (p_out, cv_ref, disp, conf)
+        return p_out, cv_ref, disp, conf
+
 
 class LevalProp(nn.Module):
     def __init__(self, h_size=2):
@@ -177,24 +211,22 @@ class LevalProp(nn.Module):
         self.convn = nn.Conv2d(32, 17 * h_size, 3, 1, 1)
         self.h_size = h_size
 
-    def forward(self, hyps, l, r):
-        # hyps is some features extracted shape (1, 16, h/4, w/4)
-        # l and r are tensors of shape (1, cin, h, w)
-        # hyps has one element in this setup
-        cost = [warp_and_aggregate(h, l, r) for h in hyps]
-        cost = torch.cat(cost, dim=1)
+    def forward(self, hyps, l, r, conf=None):
+        # hyps: list of hypothesis feature maps (each B, C, H4, W4)
+        # l/r: original features (B, cin, H, W)
+        # conf: (B,1,H4,W4) optional confidence to weight warping cost
+        cost = [warp_and_aggregate(h, l, r) for h in hyps]  # returns (B, C_cost, H4, W4)
+        cost = torch.cat(cost, dim=1)  # (B, Ccat, H4, W4)
         x = self.conv_neighbors(cost)
-        hyps = torch.cat(hyps, dim=1)
-        x = torch.cat((hyps, x), dim=1)
+        hyps_cat = torch.cat(hyps, dim=1)
+        x = torch.cat((hyps_cat, x), dim=1)
         x = self.conv1(x)
         x = self.res_block(x)
         x = self.convn(x)
-
-        dh = x[:, : 16 * self.h_size]
+        dh = x[:, :16 * self.h_size]
         w = x[:, 16 * self.h_size :]
-        return hyps + dh, w
-
-
+        return hyps_cat + dh, w
+        
 class Level(nn.Module):
     def __init__(self, cin, max_disp, h_size, cref=16):
         super(Level, self).__init__()
@@ -203,18 +235,14 @@ class Level(nn.Module):
         self.prop = LevalProp(self.h_size)
 
     def forward(self, l, r, h=None, ref=None):
-        hi, cv = self.init(l, r, ref)
-        # hi is some features extracted
-        # cv is the disparity
+        # returns (h_out, cv_ref, disp, conf) similar to before but differentiable
+        p_out, cv_ref, disp, conf = self.init(l, r, ref)
         if self.h_size == 1:
-            h, w = self.prop([hi], l, r)
-            return h, cv, hi[:, :1], w
+            h_out, w = self.prop([p_out], l, r, conf=conf)
+            return h_out, cv_ref, disp, w  # keep similar interface
         else:
-            h, w = self.prop([hi, h], l, r)
-            h0 = h[:, :16]
-            h1 = h[:, 16:]
-            w0 = w[:, :1]
-            w1 = w[:, 1:]
-            h = torch.where(w0 > w1, h0, h1)
-            return h, cv, hi[:, :1], [[w0, h0[:, :1]], [w1, h1[:, :1]]]\
-        
+            # if multi-level pipeline desired (not used often here), we can pass h into prop
+            h_out, w = self.prop([p_out, h], l, r, conf=conf)
+            # combine hypothesis channels with soft selection (weighted sum) rather than strict where
+            # keep simple: return h_out, cv_ref, disp, w
+            return h_out, cv_ref, disp, w

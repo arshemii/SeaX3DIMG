@@ -74,19 +74,32 @@ class Trainer:
             batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
             batch["label"] = batch["label"].to(self.device)
+            batch['assignment'] = batch['assignment'].to(self.device)
+            batch['assignment_bev'] = batch['assignment_bev'].to(self.device)
+            
+            if self.cfg.loss.aux_loss:
+                batch["disparity_gt"] = batch["disparity_gt"].to(self.device)
             
             self.optimizer.zero_grad()
             
             #create temporal memory for both left and right image from t - dt
             with autocast(device_type='cuda'):
                 temporal_l = self.model.create_memory(batch["left_img_previous"])
-                outputs = self.model(batch["left_img"], batch["right_img"], temporal_l)[0]
+                if self.cfg.loss.aux_loss:
+                    outputs, _, disp, conf = self.model(batch["left_img"], batch["right_img"], temporal_l)
+                else:
+                    outputs = self.model(batch["left_img"], batch["right_img"], temporal_l)[0]
                 
                 # TODO: reduce memory oh
                 del temporal_l
                 
                 assert "label" in batch.keys()
-                loss = self.loss_fn(outputs, batch["label"])
+                if self.cfg.loss.aux_loss:
+                    loss = self.loss_fn(outputs, batch["label"], batch['assignment'],
+                                        batch['assignment_bev'], disp, batch["disparity_gt"],conf)
+                else:
+                    loss = self.loss_fn(outputs, batch["label"], batch['assignment'],
+                                        batch['assignment_bev'], None, None, None)
                 
                 # TODO: reduce overhead
                 del outputs

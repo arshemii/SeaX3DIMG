@@ -157,6 +157,124 @@ def parse_label(label_path, cfg):
             
     return all_det_in_instance
 
+
+def aggregate_assignment(assignments: torch.Tensor) -> torch.Tensor:
+    """
+    Collapse [W, H, D] voxel assignments into [W, D] BEV map.
+
+    Rules:
+      1. If any object index (>=0) exists → pick one randomly.
+      2. If mix of object and ignored (-2) → pick from object ones.
+      3. If only ignored (-2) → pick one randomly from ignored.
+      4. Else (all -1) → -1 background.
+      5. Index -3 has priority to all. even to background
+    """
+    W, H, D = assignments.shape
+    bev = torch.full((W, D), -1, dtype=assignments.dtype, device=assignments.device)
+
+    ass = assignments
+
+    obj_mask = ass >= 0
+    ign_mask = ass == -2
+    blind_mask = ass == -3
+
+    has_obj = obj_mask.any(dim=1)
+    has_ign = ign_mask.any(dim=1)
+        
+    xs, zs = torch.nonzero(has_obj | has_ign, as_tuple=True)
+    for x, z in zip(xs.tolist(), zs.tolist()):
+        pillar = ass[x, :, z]
+        objs = pillar[pillar >= 0]
+        if len(objs) > 0:
+            idx = torch.randint(0, len(objs), (1,), device=ass.device)
+            bev[x, z] = objs[idx]
+        else:
+            igs = pillar[pillar == -2]
+            if len(igs) > 0:
+                idx = torch.randint(0, len(igs), (1,), device=ass.device)
+                bev[x, z] = igs[idx]
+    
+    has_blind = blind_mask.any(dim=1)
+    bev[has_blind] = -3
+    return bev
+
+def voxel_assigner(label, cfg):
+    """
+    The function produces:
+        1. An assignment with the shape 1, W, H, D where:
+            a. If voxel is out of boundary --> -3
+            b. if voxel belongs to ignore classes --> -2
+            c. if voxel is background --> -1
+            e. if voxel is an object of interest --> zero to higher (object index)
+        ** If a voxel is out of FOV, in any case is must be -3
+        
+        2. A voxel center tensor to tell that for each obj position in center_voxel (cfg.max_obj poses), what
+            is the i, j, and k of the voxel closest to the object center
+            
+        3, A tensor of True and False showinf if in the tensor position index there is an object or not
+
+    """
+    # a 3d space specifying marking of each
+    assignments = torch.full((cfg.grid_resolution[0], cfg.grid_resolution[1], cfg.grid_resolution[2]),
+                                  fill_value=-1, dtype=torch.long)
+
+    center_voxels = torch.full((cfg.max_obj, 3), fill_value=-1, dtype=torch.long)
+    
+    valid_obj_mask = torch.full((cfg.max_obj,), fill_value=0, dtype=torch.long)
+    
+    assert len(label) <= cfg.max_obj
+        
+    if len(label) == 0:
+        # there is no object at ll, mark only background and OOB
+        assignments[~cfg.oob_mask_valid] = -3
+    else:
+        for gt_idx, det in enumerate(label):
+            
+            valid_obj_mask[gt_idx]= 1
+                        
+            h, w, l = det['bbox3d'][:3]
+            cx, cy, cz = det['bbox3d'][3:6]
+            cat = int(det['category'])
+            
+            # if object is smaller than an edge of the voxel:
+            w = torch.maximum(w, torch.tensor(cfg.grid_unc[0] * 1.02, device=w.device, dtype=w.dtype))
+            h = torch.maximum(h, torch.tensor(cfg.grid_unc[1] * 1.02, device=h.device, dtype=h.dtype))
+            l = torch.maximum(l, torch.tensor(cfg.grid_unc[2] * 1.02, device=l.device, dtype=l.dtype))
+            
+            # AABB
+            x_min, x_max = cx - w / 2, cx + w / 2
+            y_min, y_max = cy - h / 2, cy + h / 2
+            z_min, z_max = cz - l / 2, cz + l / 2
+
+            # mask voxels inside this object
+            xs, ys, zs = cfg.grid[0][..., 0], cfg.grid[0][..., 1], cfg.grid[0][..., 2]
+            inside = (xs >= x_min) & (xs <= x_max) & \
+                     (ys >= y_min) & (ys <= y_max) & \
+                     (zs >= z_min) & (zs <= z_max)
+        
+            assert inside.sum() != 0
+    
+            # assign voxel values
+            if cat == cfg.data.ignore_class_id:
+                assignments[inside] = cfg.data.ignore_class_id
+            else:
+                assignments[inside] = gt_idx
+                
+            # find voxel closest to GT center
+            voxel_coords = cfg.grid[0][inside].to(cx.device)
+            dists = torch.norm(voxel_coords - det['bbox3d'][3:6].to(cx.device), dim=1)
+            min_idx = torch.argmin(dists)
+            idx_flat = torch.nonzero(inside, as_tuple=False)[min_idx]
+            i, j, k = idx_flat.tolist()
+            
+            center_voxels[gt_idx, :] = torch.tensor([i, j, k])
+        assignments[~cfg.oob_mask_valid] = -3
+        
+    assignment_bev = aggregate_assignment(assignments)
+        
+    return assignments, assignment_bev, center_voxels, valid_obj_mask
+    
+
 def img_resize(img, target_size):
     scale_1 = target_size[1]/img.shape[1]
     scale_0 = target_size[0]/img.shape[0]
@@ -233,22 +351,26 @@ def collate_fn(batch):
     }
 
     if "label" in batch[0].keys():
+        batch_dict['assignment'] = torch.stack([item['assignment'] for item in batch])
+        batch_dict["assignment_bev"] = torch.stack([item['assignment_bev'] for item in batch])
         
-        max_objects = 15 + 3 # from dataset statistics
+        max_objects = batch[0]['valid_obj'].shape[0] # from dataset statistics
         feature_number = (7   # bbox 3d
                           + 5  # bbox bev
                           + 1  # category
+                          + 3  # i, j, k of closest voxel
                           + 1)  # valid mask
         
         labels = torch.zeros((len(images_l), max_objects, feature_number), dtype=torch.float32)
         
         for batch_num, item in enumerate(batch):
             label_p_f = item["label"]
+            labels[batch_num, :, 13:16] = item['center_voxel'].to(dtype=torch.float32)
+            labels[batch_num, :, 16] = item['valid_obj'].to(dtype=torch.float32)
             for idx, obj in enumerate(label_p_f):
-                labels[batch_num, idx, 0:7] = obj['bbox3d'].to(dtype=torch.float32)
+                # labels[batch_num, idx, 0:7] = obj['bbox3d'].to(dtype=torch.float32)
                 labels[batch_num, idx, 7:12] = obj['bbox_bev'].to(dtype=torch.float32)
                 labels[batch_num, idx, 12] = obj['category'].to(dtype=torch.float32)
-                labels[batch_num, idx, 13] = 1.0
             
         batch_dict['label'] = labels
         

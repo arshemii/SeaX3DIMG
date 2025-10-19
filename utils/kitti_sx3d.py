@@ -10,22 +10,20 @@ import utils.data_utils as du
 import cv2
 
 class kitti_sx3d(Dataset):
-    def __init__(self, cfg, mode = 'train'):
+    def __init__(self, cfg,mode = 'train'):
         super(kitti_sx3d, self).__init__()
         self.mode = mode
         self.cfg = cfg
-        
         if self.mode == 'train':
             self.data_dir = self.cfg.data.path + 'training/'
             self.DF = du.parse_id_file(self.cfg.data.path + 'train.txt', self.data_dir)
-            #if self.cfg.debug:
-            #    print(f"==> length of the dataframe is: {len(self.DF)}")
-            #    print(f"==> Keys are: {self.DF[10].keys()}")
             self._label_parse()
+            self._voxel_sup()
         elif self.mode == 'val':
             self.data_dir = self.cfg.data.path + 'training/'
             self.DF = du.parse_id_file(self.cfg.data.path + 'val.txt', self.data_dir)
             self._label_parse()
+            self._voxel_sup()
         elif self.mode == 'test':
             self.data_dir = self.cfg.data.path + 'testing/'
             self.DF = du.parse_id_file(self.cfg.data.path + 'test.txt', self.data_dir)
@@ -45,52 +43,11 @@ class kitti_sx3d(Dataset):
             instance["labels"] = du.parse_label(instance['label_path'], self.cfg)
 
             
-    def statistics(self):
-        assert self.mode != 'test'
+    def _voxel_sup(self):
         
-        x = []
-        y = []
-        z =[]
-        
-        min_y = 0
-        max_y = 0
-        
-        yaw = []
-        
-        max_obj_per_frame = 0
-        
-        for inst in self.DF:
-            
-            num_obj = 0
-            
-            for det in inst['labels']:
-                
-                num_obj += 1
-                
-                yaw.append(det['bbox3d'][6])
-                box = det['bbox3d'][3:6]
-                
-                if box[1] < min_y:
-                    min_y = box[1]
-                    min_id = inst["ID"]
-                if box[1] > max_y:
-                    max_y = box[1]
-                    max_id = inst["ID"]
-                    
-                x.append(box[0])
-                y.append(box[1])
-                z.append(box[2])
-                
-            if num_obj > max_obj_per_frame:
-                max_obj_per_frame = num_obj
-        
-        print(f"X statistics - min: {min(x)} - max: {max(x)}")
-        print(f"Y statistics - min: {min(y)} - max: {max(y)}")
-        print(f"Z statistics - min: {min(z)} - max: {max(z)}")
-        print(f"Maximum object per frame: {max_obj_per_frame}")
-        # print(f"Max Y index: {max_id}, Min Y index: {min_id}")
-        
-        return yaw
+        for instance in self.DF:
+            instance["ass"], instance["ass_bev"], instance["c_vox"], instance["valid_obj"] = du.voxel_assigner(instance["labels"], self.cfg)
+
         
     def __getitem__(self, index):
         instance = self.DF[index]
@@ -98,17 +55,14 @@ class kitti_sx3d(Dataset):
         self.img_l =  cv2.imread(instance['img_l_path'], 1 | 128 )  
         self.img_l_previous =  cv2.imread(instance['img_l_path_previous'], 1 | 128 ) 
         self.img_r =  cv2.imread(instance['img_r_path'], 1 | 128 )
-        #self.img_r_previous =  cv2.imread(instance['img_r_path_previous'], 1 | 128 )
         
         self.img_l = cv2.cvtColor(self.img_l, cv2.COLOR_BGR2RGB)
         self.img_l_previous = cv2.cvtColor(self.img_l_previous, cv2.COLOR_BGR2RGB)
         self.img_r = cv2.cvtColor(self.img_r, cv2.COLOR_BGR2RGB)
-        #self.img_r_previous = cv2.cvtColor(self.img_r_previous, cv2.COLOR_BGR2RGB)
         
         self.img_l, scale, crop, direction = du.img_resize(self.img_l, self.cfg.model.in_size)
         self.img_l_previous, _, _, _ = du.img_resize(self.img_l_previous, self.cfg.model.in_size)
         self.img_r, _, _, _ = du.img_resize(self.img_r, self.cfg.model.in_size)
-        #self.img_r_previous, _, _, _ = du.img_resize(self.img_r_previous, self.cfg.model.in_size)
         
         self.P_l_converted = du.convert_calibration(instance['calib_params']['P2'], scale, crop, direction)
         
@@ -124,6 +78,11 @@ class kitti_sx3d(Dataset):
         
         if "labels" in instance.keys():
             data["label"] = instance["labels"]
+            data["assignment"] = instance["ass"]
+            data["center_voxel"] = instance["c_vox"]
+            data["valid_obj"] = instance["valid_vox"]
+            if self.cfg.model.head == 'bev_box':
+                data["assignment_bev"] = instance["ass_bev"]
         
         return data
         

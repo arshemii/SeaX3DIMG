@@ -45,18 +45,19 @@ def training(cfg):
     from utils.data_utils import collate_fn
     from utils.kitti_sx3d import kitti_sx3d
     from SX3DIMG import get_SX3D_model
-    from utils.grid_generator import GridGenerator
     from utils.loss import loss_bev
     
     device = cfg.device[0]
     
-    dataset = kitti_sx3d(cfg)
-    
     model = get_SX3D_model(cfg)
     model.to(device)
-    oob_mask_valid = model.return_boundary_mask()
+    cfg.oob_mask_valid = model.return_boundary_mask()
     model.train()
     
+    dataset = kitti_sx3d(cfg)
+    
+    cfg.grid[0] = cfg.grid[0].to(device)
+        
     optimizer = torch.optim.AdamW(model.parameters(),
                                   lr = cfg.dev.lr, weight_decay = cfg.dev.weight_decay)
     if cfg.dev.scheduler == 'CAlr':
@@ -70,12 +71,8 @@ def training(cfg):
     else:
         raise NotImplementedError("No other scheduler is implemented!")
         
-    
-    grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc, cfg.H_off) # points in cam coordinates
-    grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32).permute(1,2,3,0)
-    grid = grid.to(device)
 
-    loss_fn = loss_bev(cfg, grid, oob_mask_valid)
+    loss_fn = loss_bev(cfg)
             
     if cfg.model.head == 'bev_box':
         if len(os.listdir(cfg.model.sx3d.checkpoint_bev)) == 0:
@@ -98,10 +95,9 @@ def evaluation(cfg):
     from utils.data_utils import collate_fn
     from utils.kitti_sx3d import kitti_sx3d
     from SX3DIMG import get_SX3D_model
-    from utils.grid_generator import GridGenerator
     from proc.evaluation import evaluate_model
     
-    dataset = kitti_sx3d(cfg)
+    
     
     # model preparation
     checkpoint_dir = cfg.model.sx3d.checkpoint_bev
@@ -113,16 +109,14 @@ def evaluation(cfg):
     
     model = get_SX3D_model(cfg)
     model = model.to(cfg.device[0])
-    oob_mask_valid = model.return_boundary_mask()
+    cfg.oob_mask_valid = model.return_boundary_mask()
     checkpoint = torch.load(latest_ckpt, map_location = cfg.device[0])
     model.load_state_dict(checkpoint['model_state'])
     model.eval()
     
-    # grid generation
-    grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc, cfg.H_off) # points in cam coordinates
-    grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32).permute(1,2,3,0)
+    dataset = kitti_sx3d(cfg)
     
-    results = evaluate_model(model, dataset, oob_mask_valid, collate_fn, grid, cfg, debug = cfg.eval.debug)
+    results = evaluate_model(model, dataset, collate_fn, cfg, debug = cfg.eval.debug)
     
     eval_range = cfg.eval.range if cfg.eval.range_limit else 90.0
     

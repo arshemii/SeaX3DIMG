@@ -344,7 +344,7 @@ class Evaluate:
         return results
 
 
-def evaluate_model(model, dataset, oob_mask_valid, collate_fn, grid, cfg, debug = False):
+def evaluate_model(model, dataset, collate_fn, cfg, debug = False):
     
     device_p = cfg.device[0] # prediction device
     device_e = cfg.eval.eval_device[0] # evaluation device
@@ -383,7 +383,7 @@ def evaluate_model(model, dataset, oob_mask_valid, collate_fn, grid, cfg, debug 
         torch.cuda.empty_cache()
 
     
-    evaluator = Evaluate(cfg, predictions, gt_all, grid, oob_mask_valid)
+    evaluator = Evaluate(cfg, predictions, gt_all, cfg.grid[0], cfg.oob_mask_valid)
     results = evaluator.evaluate()
     
     return results

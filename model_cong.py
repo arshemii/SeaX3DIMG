@@ -9,6 +9,7 @@ Created on Mon Jun  2 19:53:22 2025
 from yacs.config import CfgNode as CN
 import numpy as np
 import torch
+from utils.grid_generator import GridGenerator
 
 def config_generator():
     cfg = CN()
@@ -93,8 +94,10 @@ def config_generator():
         # y--> -0.64 to +3.86
         # z --> +94
     
-    cfg.grid_size = (20.0, 12.0, 42.0)  # H from -2 to 10
-    cfg.grid_unc = (0.62, 0.65, 0.60)
+    cfg.max_obj = 18
+    cfg.grid_size = (25.0, 10.0, 50.0)  # H from -2 to 10
+    cfg.grid_unc = (0.40, 0.60, 0.40)
+    cfg.grid_resolution = tuple(int(round(size / res)) for size, res in zip(cfg.grid_size, cfg.grid_unc))
     
     if cfg.grid_size[2] < 90.0:
         cfg.short_grid_range = True
@@ -103,6 +106,9 @@ def config_generator():
     cfg.H_off = 4
     cfg.H_min = -cfg.grid_size[1]/2 + cfg.H_off
     cfg.H_max = cfg.grid_size[1]/2 + cfg.H_off
+    
+    grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc, cfg.H_off) # points in cam coordinates
+    cfg.grid = [grid_obj.get_grid()['grid'].to(dtype=torch.float32).permute(1,2,3,0)]
     
     cfg.model.sx3d.is_confidence = True
     
@@ -113,6 +119,7 @@ def config_generator():
     cfg.data.cl3 = ["Cyclist"]
     cfg.data.cl4 = ["DontCare", "Tram"]  # no need to predict, must be removed also from data labeling
     cfg.data.cl5 = ["Misc", "Person_sitting"] # no need to predict, must be removed also from data labeling
+    cfg.data.ignore_class_id = -2
     
     cfg.data.mean = [np.array([0.485, 0.456, 0.406])]
     cfg.data.std = [np.array([0.229, 0.224, 0.225])]
@@ -160,6 +167,10 @@ def config_generator():
 
 
     cfg.loss.weight = [1.0, 1.0, 0.75, 0.65, 0.2]
+    cfg.loss.aux_loss = False
+    if cfg.loss.aux_loss:
+        cfg.loss.weight.append(0.3)
+        cfg.model.return_disp = True
     cfg.loss.alpha = 0.25
     cfg.loss.gamma = 2.0
     cfg.loss.beta = 1.0
