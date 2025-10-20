@@ -9,7 +9,21 @@ Created on Mon Jun  2 19:53:22 2025
 from yacs.config import CfgNode as CN
 import numpy as np
 import torch
-from utils.grid_generator import GridGenerator
+from utils.grid_generator import GridGenerator, cam_to_img, grid_for_sample, oob_voxels
+
+
+def grid_setup(grid_size, grid_unc, input_size, H_off, p_l):
+    grid_obj = GridGenerator(grid_size, grid_unc, H_off) # points in cam coordinates
+    grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32)
+    grid_forward = grid.permute(1,2,3,0)
+    grid_img = cam_to_img(grid_forward, p_l)
+    oob_mask = oob_voxels(grid_img, input_size)
+    oob_mask_valid = ~oob_mask
+    oob_mask_flat = oob_mask_valid.view(-1)
+    grid_flat = grid_for_sample(grid_img, input_size)
+    grid_flat_filtered = grid_flat[0][oob_mask_flat]
+    
+    return [grid], [grid_forward], [oob_mask_valid], [grid_flat_filtered]
 
 def config_generator():
     cfg = CN()
@@ -55,7 +69,7 @@ def config_generator():
     
     cfg.data.scale = max(cfg.data.scale_1, cfg.data.scale_0)
     
-    cfg.model.head = 'bev_box'  # other is bev_occupancy
+    cfg.model.head = '3d_box'
     cfg.model.back.name = 'hrnet-w48'
     cfg.model.unet_cout = 2
     cfg.model.hrnet_cout = 48
@@ -107,8 +121,10 @@ def config_generator():
     cfg.H_min = -cfg.grid_size[1]/2 + cfg.H_off
     cfg.H_max = cfg.grid_size[1]/2 + cfg.H_off
     
-    grid_obj = GridGenerator(cfg.grid_size, cfg.grid_unc, cfg.H_off) # points in cam coordinates
-    cfg.grid = [grid_obj.get_grid()['grid'].to(dtype=torch.float32).permute(1,2,3,0)]
+    
+    cfg.grid, cfg.grid_forward, cfg.oob_mask_valid, cfg.grid_flat_filtered = grid_setup(cfg.grid_size,
+                                                                                        cfg.grid_unc, cfg.model.in_size,
+                                                                                        cfg.H_off, cfg.camera.P_l[0])
     
     cfg.model.sx3d.is_confidence = True
     
@@ -167,7 +183,7 @@ def config_generator():
 
 
     cfg.loss.weight = [1.0, 1.0, 0.75, 0.65, 0.2]
-    cfg.loss.aux_loss = False
+    cfg.loss.aux_loss = True
     if cfg.loss.aux_loss:
         cfg.loss.weight.append(0.3)
         cfg.model.return_disp = True

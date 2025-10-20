@@ -8,10 +8,8 @@ Created on Mon Jun  2 19:53:22 2025
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-#from torchvision import transforms
 from modules.pose_hrnet import get_pose_net
 from modules.matching import Level
-from utils.grid_generator import cam_to_img, grid_for_sample, oob_voxels
 from modules import heads as HD
 from utils.debug_util import setup_logger
 
@@ -30,14 +28,8 @@ class SX3DIMG(nn.Module):
         self.grid = cfg.grid[0].permute(3,0,1,2).to(dtype=torch.float32)
         self.num_voxels = self.cfg.grid_resolution[0] * self.cfg.grid_resolution[1] * self.cfg.grid_resolution[2]
         
-        self.P_l = cfg.camera.P_l[0]
-        self.grid_img = cam_to_img(self.grid, self.P_l)
-        self.oob_mask = oob_voxels(self.grid_img, self.cfg.model.in_size)
-        self.oob_mask_valid = ~self.oob_mask
-        self.oob_mask_flat = self.oob_mask_valid.view(-1)
-        self.grid_flat = grid_for_sample(self.grid_img, (self.h, self.w))
-        self.grid_flat_filtered = self.grid_flat[0][self.oob_mask_flat]
-        self.grid_flat_filtered = self.grid_flat_filtered.unsqueeze(0).to(self.device)
+        self.oob_mask_flat = self.cfg.oob_mask_valid[0]
+        self.grid_flat_filtered = self.cfg.grid_flat_filtered[0].unsqueeze(0).to(self.device)
         
         self.backbone = self.feature_net()
         
@@ -49,6 +41,10 @@ class SX3DIMG(nn.Module):
             raise NotImplementedError("other representation ehad methods!")
         
         self._init_matching_layers()
+        self.disp_feat_conv = nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=True)
+        self.match_reduce = nn.Conv2d(80, 128, kernel_size=1, bias=False)
+        
+        
         self.conv2d_memory = nn.Conv2d(in_channels=48, out_channels=3,
                                       kernel_size=5, padding=2, bias=False)
         self.bn_memory = nn.BatchNorm2d(num_features=3)
@@ -62,10 +58,7 @@ class SX3DIMG(nn.Module):
         self.bn_match_2 = nn.BatchNorm2d(num_features=256)
         self.relu_create_mem = nn.ReLU()
         self.relu_matching = nn.ReLU()
-        
-    
-    def return_boundary_mask(self):
-        return self.oob_mask_valid
+
 
     def feature_net(self):
         if self.cfg.model.back.name == 'hrnet-w48':
@@ -96,41 +89,31 @@ class SX3DIMG(nn.Module):
     
     def matching_module(self, feature_l, feature_r, base):
         """
-        Inputs:
-          feature_l, feature_r: outputs of HRNet (B, Cin, H4, W4)
-          base: concatenated left features + mem_left (B, Cin_base, H4*2?, W4*2?) - keep existing shapes
-        This function aligns channels, runs Level (which returns p_out, cv_ref, disp, conf) and builds matched tensor.
+        feature_l, feature_r:
+             Intermediate outputs of HRNet (B, 48, h/4, w/4)
+             
+        base:
+            Final output of the HRNet (B, 48, h/4, w/4)
         """
         # Level.forward now returns (h_out, cv_ref, disp, w)
-        h_out, cv_ref, disp, conf = self.hrnet_disp(feature_l, feature_r)
+        _, _, disp, conf = self.hrnet_disp(feature_l, feature_r)
 
-        disp_up = F.interpolate(disp, size=(base.shape[2], base.shape[3]), mode='bilinear', align_corners=True)  # (B,1,H_base,W_base)
-        conf_up = F.interpolate(conf, size=(base.shape[2], base.shape[3]), mode='bilinear', align_corners=True)
-    
-        if not hasattr(self, 'disp_feat_conv'):
-            # attach modules to self dynamically (first call)
-            self.disp_feat_conv = nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=True).to(self.device)
-            nn.init.kaiming_normal_(self.disp_feat_conv.weight, nonlinearity='relu')
-        disp_feat = self.disp_feat_conv(disp_up)  # (B,32,H_base,W_base)
-    
-        # Downsample base feature as you had
-        base_down = self.downsample_feat(base)  # outputs 96 channels as before
-    
-        # Concatenate base_down, disp_feat (and optionally conf as a channel)
-        conf_channel = conf_up
-        combined = torch.cat([base_down, disp_feat, conf_channel], dim=1)  # (B, 96+32+1=129) ~ 128
-        # if shape mismatch, pad/truncate: ensure combined has 128 channels for BN
-        # create a small 1x1 conv to make exact channel count 128 (if combined channels not matching)
-        if combined.shape[1] != 128:
-            if not hasattr(self, 'match_reduce'):
-                self.match_reduce = nn.Conv2d(combined.shape[1], 128, kernel_size=1, bias=False).to(self.device)
-                nn.init.kaiming_normal_(self.match_reduce.weight, nonlinearity='relu')
-            combined = self.match_reduce(combined)
+        disp_up = F.interpolate(disp, size=(feature_l.shape[2], feature_l.shape[3]),
+                                mode='bilinear', align_corners=True)                # (B,1,h/4,2/4)
+        conf_up = F.interpolate(conf, size=(feature_l.shape[2], feature_l.shape[3]),
+                                mode='bilinear', align_corners=True)
+
+        disp_feat = self.disp_feat_conv(disp_up)  # (B,32,h/4,w/4)
+   
+        # Concatenate base, disp_feat
+        combined = torch.cat([base, disp_feat], dim=1)  # (B, 32 + 48, h/4, w/4)
+
+        combined = self.match_reduce(combined)  # (B, 128, h/4, w/4)
     
         base_down = self.bn_match_1(combined)
         base_down = self.conv2d_match(base_down)
         base_down = self.bn_match_2(base_down)
-        base_down = self.relu_matching(base_down)
+        base_down = self.relu_matching(base_down)   # (B, 256, h/4, w/4)
     
         return base_down, disp_up, conf_up
     
@@ -219,32 +202,28 @@ class SX3DIMG(nn.Module):
         
     def forward(self, img_l, img_r, mem_left, calib = None):
         """
-        img_l and img_r: a torch tensor of shape (n, 3, 512, 960)
-        mem_left and mem_right: tensors of shape 1, 3, 128, 240
+        img_l and img_r:    Shape (B, 3, 288, 960) --> h=288, w=960
+        mem_left:           Shape B, 3, 128, 240
 
         """            
         # Feature extraction from each image
-        left_f = self.backbone(img_l)
-        right_f = self.backbone(img_r) # shape for outputs: (1, 48, 128, 240)
+        left_f, left_f_inter = self.backbone(img_l)     # shape for outputs: (1, 48, h/4, h/4)
+        _, right_f_inter = self.backbone(img_r)         # shape for outputs: (1, 48, h/4, h/4)
 
-        # this is the first model output
-        mem_l = self.conv2d_memory(left_f)
-        mem_l = self.bn_memory(mem_l)
-        output_memory = self.relu_create_mem(mem_l)
-        
-        del mem_l
-        assert output_memory.shape[2] == int(self.h/4)
-        
-        # keeping left features for final concatenation
-        base_feature = torch.cat([left_f, mem_left], dim = 1)
-        
-        del mem_left
-        
+
         # matching stage
-        matched_tensor, disp_upsampled, conf_upsampled = self.matching_module(left_f, right_f, base_feature)
+        matched_tensor, disp_upsampled, conf_upsampled = self.matching_module(left_f_inter,
+                                                                              right_f_inter,
+                                                                              left_f)
         
-        del left_f, right_f, base_feature
         voxel = self.voxelizer(matched_tensor, conf_upsampled)
+        
+        # TODO: create memory here
+        # this is the first model output
+        # mem_l = self.conv2d_memory(left_f)
+        # mem_l = self.bn_memory(mem_l)
+        # output_memory = self.relu_create_mem(mem_l)
+        # assert output_memory.shape[2] == int(self.h/4)
         
         if self.debug:
             print("==> Detection head started")
@@ -255,10 +234,10 @@ class SX3DIMG(nn.Module):
         else:
             raise NotImplementedError("other representation ehad methods!")
         
-        if self.cfg.model.return_disp:
+        if self.cfg.loss.aux_loss:
             return out, output_memory, disp_upsampled
         else:
-            return out, output_memory, disp_upsampled, conf_upsampled
+            return out, output_memory
         
 def load_weights_from_checkpoint(model, checkpoint_path, logger=None):
     if checkpoint_path is not None:

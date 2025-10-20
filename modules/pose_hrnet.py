@@ -453,6 +453,8 @@ class PoseHighResolutionNet(nn.Module):
             else:
                 x_list.append(y_list[i])
         y_list = self.stage3(x_list)
+        
+        inter = y_list[0]
 
         x_list = []
         for i in range(self.stage4_cfg['NUM_BRANCHES']):
@@ -463,8 +465,7 @@ class PoseHighResolutionNet(nn.Module):
         y_list = self.stage4(x_list)
         
         if self.out == "features":
-            #print("annnnnnnnnnnnnnnnnnnnnnnnnnnn")
-            return y_list[0]
+            return y_list[0], inter
             #return stage2_out, y_list[0]
         else:
             x = self.final_layer(y_list[0])
