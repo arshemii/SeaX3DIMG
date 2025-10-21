@@ -77,7 +77,7 @@ def config_generator():
     cfg.data.scale = max(cfg.data.scale_1, cfg.data.scale_0)
     
     cfg.model.head = '3d_box'
-    cfg.model.back.name = 'hrnet-w48'
+    cfg.model.back.name = 'hrnet-w48'  # other option DDRNet-23-slim
     cfg.model.unet_cout = 2
     cfg.model.hrnet_cout = 48
     cfg.model.max_disp = 16
