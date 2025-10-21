@@ -1,16 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jun  2 19:53:22 2025
+Documentation:
 
-@author: arash
+    P value after conversion:
+    tensor([[5.5771e+02, 0.0000e+00, 4.7116e+02, 3.4672e+01],
+           [0.0000e+00, 5.5771e+02, 1.3361e+02, 1.6725e-01],
+           [0.0000e+00, 0.0000e+00, 1.0000e+00, 2.7459e-03]], dtype=torch.float64)
+
+    Dataset range:
+        x--> -40 to +40
+        y--> -0.64 to +3.86
+        z --> +94
 """
 
 from yacs.config import CfgNode as CN
 import numpy as np
 import torch
 from utils.grid_generator import GridGenerator, cam_to_img, grid_for_sample, oob_voxels
-
 
 def grid_setup(grid_size, grid_unc, input_size, H_off, p_l):
     grid_obj = GridGenerator(grid_size, grid_unc, H_off) # points in cam coordinates
@@ -23,7 +30,7 @@ def grid_setup(grid_size, grid_unc, input_size, H_off, p_l):
     grid_flat = grid_for_sample(grid_img, input_size)
     grid_flat_filtered = grid_flat[0][oob_mask_flat]
     
-    return [grid], [grid_forward], [oob_mask_valid], [grid_flat_filtered]
+    return [grid], [grid_forward], [oob_mask_valid], [oob_mask_flat], [grid_flat_filtered]
 
 def config_generator():
     cfg = CN()
@@ -74,39 +81,23 @@ def config_generator():
     cfg.model.unet_cout = 2
     cfg.model.hrnet_cout = 48
     cfg.model.max_disp = 16
-    
-    ################################
-    
+    cfg.model.conf_voxel = True
+    cfg.model.sx3d.drop_out = 0.10
     cfg.model.sx3d.use_checkpoint = False
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
-    ####################################
     
     cfg.data.path = './dataset/sequential/'
-    cfg.data.filter = [{
-        "trunc": 0.8,
-        "occl": [0, 1, 2]}]
+    cfg.data.filter = [{"trunc": 0.8,
+                        "occl": [0, 1, 2]}]
     
     cfg.camera.P_l = [torch.tensor([[5.5771e+02, 0.0000e+00, 4.7116e+02, 3.4672e-02],
                                              [0.0000e+00, 5.5771e+02, 1.3361e+02, 1.6725e-04],
                                              [0.0000e+00, 0.0000e+00, 1.0000e+00, 2.7459e-06]
                                              ], dtype=torch.float32)]
-    # example:
-    # tensor([[5.5771e+02, 0.0000e+00, 4.7116e+02, 3.4672e+01],
-    #        [0.0000e+00, 5.5771e+02, 1.3361e+02, 1.6725e-01],
-    #        [0.0000e+00, 0.0000e+00, 1.0000e+00, 2.7459e-03]], dtype=torch.float64)
-    
-    cfg.model.sx3d.drop_out = 0.10
-    
-    
     
     cfg.radar_fusion = False
     cfg.model.sx3d.init_weight = True
-    
-    # dataset range:
-        # x--> -40 to +40
-        # y--> -0.64 to +3.86
-        # z --> +94
     
     cfg.max_obj = 18
     cfg.grid_size = (25.0, 10.0, 50.0)  # H from -2 to 10
@@ -122,9 +113,9 @@ def config_generator():
     cfg.H_max = cfg.grid_size[1]/2 + cfg.H_off
     
     
-    cfg.grid, cfg.grid_forward, cfg.oob_mask_valid, cfg.grid_flat_filtered = grid_setup(cfg.grid_size,
-                                                                                        cfg.grid_unc, cfg.model.in_size,
-                                                                                        cfg.H_off, cfg.camera.P_l[0])
+    cfg.grid, cfg.grid_forward, cfg.oob_mask_valid, cfg.oob_mask_flat, cfg.grid_flat_filtered = grid_setup(cfg.grid_size,
+                                                                                                    cfg.grid_unc, cfg.model.in_size,
+                                                                                                    cfg.H_off, cfg.camera.P_l[0])
     
     cfg.model.sx3d.is_confidence = True
     
@@ -140,7 +131,6 @@ def config_generator():
     cfg.data.mean = [np.array([0.485, 0.456, 0.406])]
     cfg.data.std = [np.array([0.229, 0.224, 0.225])]
     cfg.data.img_layout = 'rgb'
-    
     cfg.data.max_obj_per_frame = 15
     
     
