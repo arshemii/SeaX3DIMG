@@ -11,16 +11,11 @@ import torch.nn.functional as F
 from modules.pose_hrnet import get_pose_net
 from modules.matching import Level
 from modules import heads as HD
-from utils.debug_util import setup_logger
-
-logger = setup_logger('SX3DIMG_logs', './logging_dir')
 
 class SX3DIMG(nn.Module):
     def __init__(self, cfg, is_train_backbone):
         super(SX3DIMG, self).__init__()
         self.cfg = cfg
-        self.debug = self.cfg.debug
-        self.logs = self.cfg.logging
         self.is_train_backbone = is_train_backbone
         self.device = self.cfg.device[0]
         
@@ -32,14 +27,7 @@ class SX3DIMG(nn.Module):
         self.grid_flat_filtered = self.cfg.grid_flat_filtered[0].unsqueeze(0).to(self.device)
         
         self.backbone = self.feature_net()
-        
-        if self.cfg.model.head == 'bev_box':
-            self._init_bev_box_head()
-        elif self.cfg.model.head == 'bev_occupancy':
-            self._init_bev_occupancy_head()
-        else:
-            raise NotImplementedError("other representation ehad methods!")
-        
+        self._init_head()
         self._init_matching_layers()
         self.disp_feat_conv = nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=True)
         self.match_reduce = nn.Conv2d(80, 128, kernel_size=1, bias=False)
@@ -74,18 +62,12 @@ class SX3DIMG(nn.Module):
         self.hrnet_disp = Level(self.cfg.model.hrnet_cout,
                               self.cfg.model.max_disp, 1)
 
-    def _init_bev_box_head(self):
-        self.head = HD.head_box_bev(self.cfg)
-        
-    def _init_bev_occupancy_head(self):
-        self.head = HD.head_occupancy_bev(self.cfg)
-        
-    def create_memory(self, img_l):
-        left_f_mem = self.backbone(img_l)
-        feat_l = self.conv2d_memory(left_f_mem)
-        feat_l = self.bn_memory(feat_l)
-        feat_l = self.relu_create_mem(feat_l)
-        return feat_l
+    def _init_head(self):
+        self.head = HD.head_3d_detection(self.cfg)
+
+    def create_memory_forward(self, voxel):
+        # TODO: write a function to cteare memory
+        return memory
     
     def matching_module(self, feature_l, feature_r, base):
         """
@@ -99,7 +81,7 @@ class SX3DIMG(nn.Module):
         _, _, disp, conf = self.hrnet_disp(feature_l, feature_r)
 
         disp_up = F.interpolate(disp, size=(feature_l.shape[2], feature_l.shape[3]),
-                                mode='bilinear', align_corners=True)                # (B,1,h/4,2/4)
+                                mode='bilinear', align_corners=True)                # (B,1,h/4,w/4)
         conf_up = F.interpolate(conf, size=(feature_l.shape[2], feature_l.shape[3]),
                                 mode='bilinear', align_corners=True)
 
@@ -174,70 +156,62 @@ class SX3DIMG(nn.Module):
     
     def voxelizer(self, tensor, conf_map=None):
         """
-        tensor: (B, C, H_feat, W_feat) matched_tensor
-        conf_map: (B,1,H_feat,W_feat) confidence map upsampled to same resolution as tensor (optional)
-        returns: full_voxel reshaped to (B, C, X, Y, Z)
+        Inputs:
+            tensor:     (B, 256, h/4, w/4) --> matched_tensor
+            conf_map:   (B,1,h/4, w/4)
+        Returns: full_voxel reshaped to (B, C, X, Y, Z)
         """
         B, C, Hf, Wf = tensor.shape
     
         # grid_flat_filtered shape: (1, N_valid, 1, 2)
-        grid_batched = self.grid_flat_filtered.expand(B, -1, -1, -1)  # (B, N_valid, 1, 2)
+        grid_batched = self.cfg.grid_flat_filtered[0].expand(B, -1, -1, -1)  # (B, N_valid, 1, 2)
 
         sampled = F.grid_sample(tensor, grid_batched, mode='bilinear', align_corners=True)  # (B, C, N_valid, 1)
-    
-        # optionally get confidence per sampled point (sample conf_map too)
+
         if conf_map is not None:
             conf_sampled = F.grid_sample(conf_map, grid_batched, mode='bilinear', align_corners=True)  # (B,1,N_valid,1)
             conf_sampled = conf_sampled.squeeze(-1)  # (B,1,N_valid)
         else:
             conf_sampled = None
     
-        valid_indices = self.oob_mask_flat.nonzero(as_tuple=False).squeeze(1).to(tensor.device)  # shape (N_valid,)
+        valid_indices = self.cfg.oob_mask_flat[0].nonzero(as_tuple=False).squeeze(1).to(tensor.device)  # (N_valid,)
     
-        full_voxel_flat = self._voxel_filler(sampled, valid_indices, conf_for_points=conf_sampled)  # (B,C,num_voxels)
+        full_voxel_flat = self._voxel_filler(sampled, valid_indices, conf_for_points=conf_sampled)  # (B,256,num_voxels)
     
         full_voxel = full_voxel_flat.reshape(B, C, self.grid_resolution[0], self.grid_resolution[1], self.grid_resolution[2])
     
         return full_voxel
         
-    def forward(self, img_l, img_r, mem_left, calib = None):
+    def forward(self, img_l, img_r, memory, create_memory = False):
         """
         img_l and img_r:    Shape (B, 3, 288, 960) --> h=288, w=960
-        mem_left:           Shape B, 3, 128, 240
+        mem_left:           ?????????
 
         """            
         # Feature extraction from each image
         left_f, left_f_inter = self.backbone(img_l)     # shape for outputs: (1, 48, h/4, h/4)
         _, right_f_inter = self.backbone(img_r)         # shape for outputs: (1, 48, h/4, h/4)
 
-
         # matching stage
+        # (B, 256, h/4, w/4), (B, 1, h/4, w/4), (B, 1, h/4, w/4)
         matched_tensor, disp_upsampled, conf_upsampled = self.matching_module(left_f_inter,
                                                                               right_f_inter,
                                                                               left_f)
-        
-        voxel = self.voxelizer(matched_tensor, conf_upsampled)
-        
-        # TODO: create memory here
-        # this is the first model output
-        # mem_l = self.conv2d_memory(left_f)
-        # mem_l = self.bn_memory(mem_l)
-        # output_memory = self.relu_create_mem(mem_l)
-        # assert output_memory.shape[2] == int(self.h/4)
-        
-        if self.debug:
-            print("==> Detection head started")
-        if self.cfg.model.head == 'bev_box':
-            out = self.head(voxel)
-        elif self.cfg.model.head == 'bev_occupancy':
-            out = self.head(voxel)
+        if not self.cfg.model.conf_voxel:
+            conf_upsampled = None    
+        voxel = self.voxelizer(matched_tensor, conf_upsampled) # (B, 256, X, Y, Z)
+        forward_mem = create_memory_forward(voxel)
+
+        if create_memory:
+            return forward_mem
         else:
-            raise NotImplementedError("other representation ehad methods!")
-        
-        if self.cfg.loss.aux_loss:
-            return out, output_memory, disp_upsampled
-        else:
-            return out, output_memory
+            assert memory is not None
+            voxel = torch.cat([voxel, memory], dim=1)
+            out = self.head(voxel)
+            if self.cfg.loss.aux_loss:
+                return out, disp_upsampled, forward_mem
+            else:
+                return out, forward_mem
         
 def load_weights_from_checkpoint(model, checkpoint_path, logger=None):
     if checkpoint_path is not None:
