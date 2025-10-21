@@ -53,9 +53,8 @@ class SX3DIMG(nn.Module):
             feat_net = get_pose_net(self.cfg, self.is_train_backbone)
             feat_net.to(self.device)
         else:
+            # TODO: add another lighter feature extractor
             raise NotImplementedError("Must implement resnet with output of shape (1, 48, 128, 128)")
-        if self.logs:
-            logger.info("Feature extraction network has initialized.")
         return feat_net
 
     def _init_matching_layers(self):
