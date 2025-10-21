@@ -32,20 +32,16 @@ class SX3DIMG(nn.Module):
         self.disp_feat_conv = nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=True)
         self.match_reduce = nn.Conv2d(80, 128, kernel_size=1, bias=False)
         
-        
-        self.conv2d_memory = nn.Conv2d(in_channels=48, out_channels=3,
-                                      kernel_size=5, padding=2, bias=False)
-        self.bn_memory = nn.BatchNorm2d(num_features=3)
-        self.upsample_disp = nn.ConvTranspose2d(in_channels=17, out_channels=32,
-                                                kernel_size=4, stride=2, padding=1)
-        self.downsample_feat = nn.Conv2d(in_channels=51, out_channels=96,
-                                         kernel_size=3, stride=2, padding=1)
+
         self.bn_match_1 = nn.BatchNorm2d(num_features=128)
         self.conv2d_match = nn.Conv2d(in_channels=128, out_channels=256,
                                       kernel_size=3, padding=1, bias=False)
         self.bn_match_2 = nn.BatchNorm2d(num_features=256)
-        self.relu_create_mem = nn.ReLU()
         self.relu_matching = nn.ReLU()
+        
+        self.conv3d_mem = nn.Sequential(nn.Conv3d(256, 3, 3, padding=1, bias=False),
+                                        nn.BatchNorm3d(3),
+                                        nn.ReLU(inplace=True))
 
 
     def feature_net(self):
@@ -65,8 +61,8 @@ class SX3DIMG(nn.Module):
         self.head = HD.head_3d_detection(self.cfg)
 
     def create_memory_forward(self, voxel):
-        # TODO: write a function to cteare memory
-        return memory
+        
+        return self.conv3d_mem(voxel)
     
     def matching_module(self, feature_l, feature_r, base):
         """
@@ -163,7 +159,7 @@ class SX3DIMG(nn.Module):
         B, C, Hf, Wf = tensor.shape
     
         # grid_flat_filtered shape: (1, N_valid, 1, 2)
-        grid_batched = self.cfg.grid_flat_filtered[0].expand(B, -1, -1, -1)  # (B, N_valid, 1, 2)
+        grid_batched = self.cfg.grid_flat_filtered.expand(B, -1, -1, -1)  # (B, N_valid, 1, 2)
 
         sampled = F.grid_sample(tensor, grid_batched, mode='bilinear', align_corners=True)  # (B, C, N_valid, 1)
 
@@ -173,7 +169,7 @@ class SX3DIMG(nn.Module):
         else:
             conf_sampled = None
     
-        valid_indices = self.cfg.oob_mask_flat[0].nonzero(as_tuple=False).squeeze(1).to(tensor.device)  # (N_valid,)
+        valid_indices = self.oob_mask_flat.nonzero(as_tuple=False).squeeze(1).to(tensor.device)  # (N_valid,)
     
         full_voxel_flat = self._voxel_filler(sampled, valid_indices, conf_for_points=conf_sampled)  # (B,256,num_voxels)
     
@@ -184,7 +180,7 @@ class SX3DIMG(nn.Module):
     def forward(self, img_l, img_r, memory, create_memory = False):
         """
         img_l and img_r:    Shape (B, 3, 288, 960) --> h=288, w=960
-        mem_left:           ?????????
+        mem_left:           shape (B, 3, X, Y, Z)
 
         """            
         # Feature extraction from each image
@@ -199,38 +195,33 @@ class SX3DIMG(nn.Module):
         if not self.cfg.model.conf_voxel:
             conf_upsampled = None    
         voxel = self.voxelizer(matched_tensor, conf_upsampled) # (B, 256, X, Y, Z)
-        forward_mem = create_memory_forward(voxel)
+        forward_mem = self.create_memory_forward(voxel)
 
         if create_memory:
             return forward_mem
         else:
             assert memory is not None
-            voxel = torch.cat([voxel, memory], dim=1)
+            voxel = torch.cat([voxel, memory], dim=1)  # chanels --> 256 + 3
             out = self.head(voxel)
             if self.cfg.loss.aux_loss:
                 return out, disp_upsampled, forward_mem
             else:
                 return out, forward_mem
         
-def load_weights_from_checkpoint(model, checkpoint_path, logger=None):
+def load_weights_from_checkpoint(model, checkpoint_path):
     if checkpoint_path is not None:
         ckpt = torch.load(checkpoint_path, map_location='cpu')
         if 'state_dict' in ckpt:
             model.load_state_dict(ckpt['state_dict'], strict=False)
         else:
             model.load_state_dict(ckpt, strict=False)
-        if logger:
-            logger.info(f"==> Loaded model checkpoint from: {checkpoint_path}")
-        else:
-            print(f"==> Loaded model checkpoint from: {checkpoint_path}")
+
+        print(f"==> Loaded model checkpoint from: {checkpoint_path}")
     else:
-        if logger:
-            logger.info("==> No checkpoint provided. Training from scratch or initializing backbone only.")
-        else:
-            print("==> No checkpoint provided. Training from scratch or initializing backbone only.")
+        print("==> No checkpoint provided. Training from scratch or initializing backbone only.")
 
 
-def get_SX3D_model(cfg, is_train=True, logger = logger):
+def get_SX3D_model(cfg, is_train=True):
     
     is_train_backbone = is_train and cfg.model.back.init_weight
     
@@ -238,7 +229,7 @@ def get_SX3D_model(cfg, is_train=True, logger = logger):
     
     # Always try to load full model checkpoint if provided
     if cfg.model.sx3d.use_checkpoint and cfg.model.sx3d.checkpoint:
-        load_weights_from_checkpoint(model, cfg.model.sx3d.checkpoint, logger)
+        load_weights_from_checkpoint(model, cfg.model.sx3d.checkpoint)
     
     return model
     
