@@ -76,7 +76,8 @@ def config_generator():
     
     cfg.data.scale = max(cfg.data.scale_1, cfg.data.scale_0)
     
-    cfg.model.head = '3d_box'
+    cfg.model.head.type = '3d_box'
+    cfg.model.head.inplanes = 128
     cfg.model.back.name = 'hrnet-w48'  # other option DDRNet-23-slim
     cfg.model.unet_cout = 2
     cfg.model.hrnet_cout = 48
@@ -100,9 +101,10 @@ def config_generator():
     cfg.model.sx3d.init_weight = True
     
     cfg.max_obj = 18
-    cfg.grid_size = (25.0, 10.0, 50.0)  # H from -2 to 10
-    cfg.grid_unc = (0.40, 0.60, 0.40)
+    cfg.grid_size = (26.0, 10.0, 51.0)  # H from -2 to 10
+    cfg.grid_unc = (0.43, 0.50, 0.40)
     cfg.grid_resolution = tuple(int(round(size / res)) for size, res in zip(cfg.grid_size, cfg.grid_unc))
+
     
     if cfg.grid_size[2] < 90.0:
         cfg.short_grid_range = True
