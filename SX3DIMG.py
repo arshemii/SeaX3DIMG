@@ -204,7 +204,8 @@ class SX3DIMG(nn.Module):
         
         del matched_tensor, left_f_inter, right_f_inter
         
-        forward_mem = self.create_memory_forward(voxel)
+        # TODO: should be done?
+        forward_mem = self.create_memory_forward(voxel).detach()
 
         if create_memory:
             return forward_mem

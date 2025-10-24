@@ -44,6 +44,7 @@ def parse_id_file(set_path, data_dir):
             instance_str = line
             label_path = os.path.join(data_dir, 'label_2', instance_str + '.txt')
             prev2_path = os.path.join(data_dir, 'prev_2', instance_str + '_02.png')
+            
 
             # Filter: check if necessary files exist
             if not os.path.exists(prev2_path):
@@ -56,6 +57,7 @@ def parse_id_file(set_path, data_dir):
                 "img_l_path": os.path.join(data_dir, 'prev_2', instance_str + '_01.png'),
                 "img_l_path_previous": os.path.join(data_dir, 'prev_2', instance_str + '_02.png'),
                 "img_r_path": os.path.join(data_dir, 'prev_3', instance_str + '_01.png'),
+                "img_r_path_previous": os.path.join(data_dir, 'prev_3', instance_str + '_02.png'),
                 "calib_path": os.path.join(data_dir, 'calib', instance_str + '.txt'),
             }
 
@@ -292,9 +294,9 @@ def voxel_assigner(label, cfg, debug = False):
             center_voxels[gt_idx, :] = torch.tensor([i, j, k])
         assignments[~cfg.oob_mask_valid[0]] = -3
         
-    assignment_bev = aggregate_assignment(assignments)
+    # assignment_bev = aggregate_assignment(assignments)
         
-    return assignments, assignment_bev, center_voxels, valid_obj_mask
+    return assignments, center_voxels, valid_obj_mask
     
 
 def img_resize(img, target_size):
@@ -374,19 +376,54 @@ def project_velo_to_ref(pts_3d_velo, V2C):
         pts_3d_velo = cart2hom(pts_3d_velo) # nx4
         return np.dot(pts_3d_velo, np.transpose(V2C))
 
-def project_velo_to_rect(pts_3d_velo):
-        pts_3d_ref = project_velo_to_ref(pts_3d_velo)
-        return project_ref_to_rect(pts_3d_ref)
+def project_velo_to_rect(pts_3d_velo, cfg):
+        pts_3d_ref = project_velo_to_ref(pts_3d_velo, cfg.camera.V2C[0])
+        return project_ref_to_rect(pts_3d_ref, cfg.camera.R0[0])
 
-def pcl_as_depth(pcl_path):
-    pcl = np.fromfile(pcl_path, dtype=np.float32).reshape(-1, 4)[:, :3]  # [N, 4] intensity last
+def project_rect_to_image(pts_3d_rect, P2):
+    """Project rectified camera coordinates to image plane."""
+    pts_3d_hom = cart2hom(pts_3d_rect)       # [N,4]
+    pts_2d = np.dot(pts_3d_hom, P2.T)        # [N,3]
+    pts_2d[:, 0] /= pts_2d[:, 2]             # u = x / z
+    pts_2d[:, 1] /= pts_2d[:, 2]             # v = y / z
     
-    pcc = project_velo_to_rect(pcl)
+    a = pts_2d[:, :2]
+    b = pts_3d_rect[:, 2]
     
+    return a, b
+
+def create_depth_map(pcc, P2, im_shape=(375, 1242)):
+    """Create sparse depth map from LiDAR points."""
+    pts_img, depth = project_rect_to_image(pcc, P2)
+    u, v = pts_img[:, 0], pts_img[:, 1]
+
+    # Round to nearest pixel indices
+    u = np.round(u).astype(np.int32)
+    v = np.round(v).astype(np.int32)
+
+    # Filter valid points inside image bounds
+    valid = (u >= 0) & (v >= 0) & (u < im_shape[1]) & (v < im_shape[0]) & (depth > 0)
+    u, v, depth = u[valid], v[valid], depth[valid]
+
+    # Initialize empty depth map
+    depth_map = np.zeros(im_shape, dtype=np.float32)
+
+    # Handle overlapping pixels (keep nearest)
+    for i in range(len(depth)):
+        if depth_map[v[i], u[i]] == 0 or depth[i] < depth_map[v[i], u[i]]:
+            depth_map[v[i], u[i]] = depth[i]
+
+    # Convert to torch tensor if needed
+    return torch.from_numpy(depth_map)
+
+def pcl_as_depth(pcl_path, cfg):
+    pcl = np.fromfile(pcl_path, dtype=np.float32).reshape(-1, 4)[:, :3]  # [N, 3] forward dis, left distance, up distance
     
+    pcc = project_velo_to_rect(pcl, cfg)
     
+    pcc_img = create_depth_map(pcc, cfg.camera.P_l[0], cfg.model.in_size)
     
-    return pcc
+    return pcc_img
     
 
 
@@ -395,18 +432,20 @@ def collate_fn(batch):
     images_l = torch.stack([item['left_img'] for item in batch])          # [B, 3, H, W]
     images_l_p = torch.stack([item['left_img_previous'] for item in batch])
     images_r = torch.stack([item['right_img'] for item in batch])
-    calib_left = torch.stack([item['calib'] for item in batch], dim=0)  # a 12-value each row of P
+    images_r_p = torch.stack([item['right_img_previous'] for item in batch])
+    # calib_left = torch.stack([item['calib'] for item in batch], dim=0)  # a 12-value each row of P
     
     batch_dict = {
         "left_img": images_l.to(dtype=torch.float32),
         "left_img_previous": images_l_p.to(dtype=torch.float32),
         "right_img": images_r.to(dtype=torch.float32),
-        "calib": calib_left.to(dtype=torch.float32)
+        "right_img_previous": images_r_p.to(dtype=torch.float32),
+        # "calib": calib_left.to(dtype=torch.float32)
     }
 
     if "label" in batch[0].keys():
         batch_dict['assignment'] = torch.stack([item['assignment'] for item in batch])
-        batch_dict["assignment_bev"] = torch.stack([item['assignment_bev'] for item in batch])
+       #  batch_dict["assignment_bev"] = torch.stack([item['assignment_bev'] for item in batch])
         
         max_objects = batch[0]['valid_obj'].shape[0] # from dataset statistics
         feature_number = (7   # bbox 3d

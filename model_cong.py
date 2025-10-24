@@ -96,8 +96,15 @@ def config_generator():
                                              [0.0000e+00, 5.5771e+02, 1.3361e+02, 1.6725e-04],
                                              [0.0000e+00, 0.0000e+00, 1.0000e+00, 2.7459e-06]
                                              ], dtype=torch.float32)]
-    # cfg.camera.R0 = calibs['R0_rect']
-    # cfg.camera.V2C = calibs['Tr_velo_to_cam']
+    cfg.camera.R0 = [torch.tensor([[ 0.9999239 ,  0.00983776, -0.00744505],
+                                       [-0.0098698 ,  0.9999421 , -0.00427846],
+                                       [ 0.00740253,  0.00435161,  0.9999631 ],
+                                       ], dtype=torch.float32)]
+    
+    cfg.camera.V2C = [torch.tensor([[ 7.533745e-03, -9.999714e-01, -6.166020e-04, -4.069766e-03],
+                                       [ 1.480249e-02,  7.280733e-04, -9.998902e-01, -7.631618e-02],
+                                       [ 9.998621e-01,  7.523790e-03,  1.480755e-02, -2.717806e-01],
+                                       ], dtype=torch.float32)]
     
     cfg.radar_fusion = False
     cfg.model.sx3d.init_weight = True
