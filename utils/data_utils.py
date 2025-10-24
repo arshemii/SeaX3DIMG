@@ -198,7 +198,7 @@ def aggregate_assignment(assignments: torch.Tensor) -> torch.Tensor:
     bev[has_blind] = -3
     return bev
 
-def voxel_assigner(label, cfg):
+def voxel_assigner(label, cfg, debug = False):
     """
     The function produces:
         1. An assignment with the shape 1, W, H, D where:
@@ -226,7 +226,7 @@ def voxel_assigner(label, cfg):
         
     if len(label) == 0:
         # there is no object at ll, mark only background and OOB
-        assignments[~cfg.oob_mask_valid] = -3
+        assignments[~cfg.oob_mask_valid[0]] = -3
     else:
         for gt_idx, det in enumerate(label):
             
@@ -236,22 +236,44 @@ def voxel_assigner(label, cfg):
             cx, cy, cz = det['bbox3d'][3:6]
             cat = int(det['category'])
             
+            if debug:
+                print(f"before {w}, {h}, {l}")
+            
             # if object is smaller than an edge of the voxel:
             w = torch.maximum(w, torch.tensor(cfg.grid_unc[0] * 1.02, device=w.device, dtype=w.dtype))
             h = torch.maximum(h, torch.tensor(cfg.grid_unc[1] * 1.02, device=h.device, dtype=h.dtype))
             l = torch.maximum(l, torch.tensor(cfg.grid_unc[2] * 1.02, device=l.device, dtype=l.dtype))
             
+            if debug:
+                print(f"after {w}, {h}, {l}")
+            
             # AABB
             x_min, x_max = cx - w / 2, cx + w / 2
             y_min, y_max = cy - h / 2, cy + h / 2
             z_min, z_max = cz - l / 2, cz + l / 2
+            
+            if debug:
+                print(f"object range x is: {x_min}, {x_max}")
+                print(f"object range y is: {y_min}, {y_max}")
+                print(f"object range z is: {z_min}, {z_max}")
+            
 
             # mask voxels inside this object
-            xs, ys, zs = cfg.grid[0][..., 0], cfg.grid[0][..., 1], cfg.grid[0][..., 2]
+            xs, ys, zs = cfg.grid_forward[0][..., 0], cfg.grid_forward[0][..., 1], cfg.grid_forward[0][..., 2]
+            
+            if debug:
+                print(f"grid x shape --> {xs.shape}")
+                print(f"grid point distances: {cfg.grid_unc[0]}, {cfg.grid_unc[1]}, {cfg.grid_unc[2]}")
+                print(f"grid x range is: {xs.min()}, {xs.max()}")
+                print(f"grid y range is: {ys.min()}, {ys.max()}")
+                print(f"grid z range is: {zs.min()}, {zs.max()}")
+            
             inside = (xs >= x_min) & (xs <= x_max) & \
                      (ys >= y_min) & (ys <= y_max) & \
                      (zs >= z_min) & (zs <= z_max)
-        
+            
+            
+            
             assert inside.sum() != 0
     
             # assign voxel values
@@ -261,14 +283,14 @@ def voxel_assigner(label, cfg):
                 assignments[inside] = gt_idx
                 
             # find voxel closest to GT center
-            voxel_coords = cfg.grid[0][inside].to(cx.device)
+            voxel_coords = cfg.grid_forward[0][inside].to(cx.device)
             dists = torch.norm(voxel_coords - det['bbox3d'][3:6].to(cx.device), dim=1)
             min_idx = torch.argmin(dists)
             idx_flat = torch.nonzero(inside, as_tuple=False)[min_idx]
             i, j, k = idx_flat.tolist()
             
             center_voxels[gt_idx, :] = torch.tensor([i, j, k])
-        assignments[~cfg.oob_mask_valid] = -3
+        assignments[~cfg.oob_mask_valid[0]] = -3
         
     assignment_bev = aggregate_assignment(assignments)
         
@@ -335,6 +357,38 @@ def img_normalize(img, mean, std):
     img = torch.from_numpy(img).permute(2, 0, 1)
     
     return img.to(torch.float32)
+
+def project_ref_to_rect(pts_3d_ref, R0):
+        ''' Input and Output are nx3 points '''
+        return np.transpose(np.dot(R0, np.transpose(pts_3d_ref)))
+
+def cart2hom(pts_3d):
+        ''' Input: nx3 points in Cartesian
+            Oupput: nx4 points in Homogeneous by pending 1
+        '''
+        n = pts_3d.shape[0]
+        pts_3d_hom = np.hstack((pts_3d, np.ones((n,1))))
+        return pts_3d_hom
+
+def project_velo_to_ref(pts_3d_velo, V2C):
+        pts_3d_velo = cart2hom(pts_3d_velo) # nx4
+        return np.dot(pts_3d_velo, np.transpose(V2C))
+
+def project_velo_to_rect(pts_3d_velo):
+        pts_3d_ref = project_velo_to_ref(pts_3d_velo)
+        return project_ref_to_rect(pts_3d_ref)
+
+def pcl_as_depth(pcl_path):
+    pcl = np.fromfile(pcl_path, dtype=np.float32).reshape(-1, 4)[:, :3]  # [N, 4] intensity last
+    
+    pcc = project_velo_to_rect(pcl)
+    
+    
+    
+    
+    return pcc
+    
+
 
 def collate_fn(batch):
     # a batch is a list

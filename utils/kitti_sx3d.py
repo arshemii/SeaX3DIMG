@@ -65,6 +65,8 @@ class kitti_sx3d(Dataset):
         self.img_r, _, _, _ = du.img_resize(self.img_r, self.cfg.model.in_size)
         
         self.P_l_converted = du.convert_calibration(instance['calib_params']['P2'], scale, crop, direction)
+        self.R0 = instance['calib_params']['R0']
+        self.V2C = instance['calib_params']['V2C']
         
         self.img_l = du.img_normalize(self.img_l, self.cfg.data.mean[0], self.cfg.data.std[0])
         self.img_l_previous = du.img_normalize(self.img_l_previous, self.cfg.data.mean[0], self.cfg.data.std[0])
@@ -80,11 +82,11 @@ class kitti_sx3d(Dataset):
             data["label"] = instance["labels"]
             data["assignment"] = instance["ass"]
             data["center_voxel"] = instance["c_vox"]
-            data["valid_obj"] = instance["valid_vox"]
+            data["valid_obj"] = instance["valid_obj"]
             if self.cfg.model.head == 'bev_box':
                 data["assignment_bev"] = instance["ass_bev"]
         
-        return data
+        return data, self.R0, self.V2C
         
     def __len__(self):
         return len(self.DF)

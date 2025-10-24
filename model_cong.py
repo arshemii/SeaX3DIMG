@@ -23,7 +23,7 @@ def grid_setup(grid_size, grid_unc, input_size, H_off, p_l):
     grid_obj = GridGenerator(grid_size, grid_unc, H_off) # points in cam coordinates
     grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32)
     grid_forward = grid.permute(1,2,3,0)
-    grid_img = cam_to_img(grid_forward, p_l)
+    grid_img = cam_to_img(grid, p_l)
     oob_mask = oob_voxels(grid_img, input_size)
     oob_mask_valid = ~oob_mask
     oob_mask_flat = oob_mask_valid.view(-1)
@@ -96,6 +96,8 @@ def config_generator():
                                              [0.0000e+00, 5.5771e+02, 1.3361e+02, 1.6725e-04],
                                              [0.0000e+00, 0.0000e+00, 1.0000e+00, 2.7459e-06]
                                              ], dtype=torch.float32)]
+    # cfg.camera.R0 = calibs['R0_rect']
+    # cfg.camera.V2C = calibs['Tr_velo_to_cam']
     
     cfg.radar_fusion = False
     cfg.model.sx3d.init_weight = True
@@ -117,8 +119,7 @@ def config_generator():
     
     cfg.grid, cfg.grid_forward, cfg.oob_mask_valid, cfg.oob_mask_flat, cfg.grid_flat_filtered = grid_setup(cfg.grid_size,
                                                                                                     cfg.grid_unc, cfg.model.in_size,
-                                                                                                    cfg.H_off, cfg.camera.P_l[0])
-    
+                                                                                                    cfg.H_off, cfg.camera.P_l[0])    
     cfg.model.sx3d.is_confidence = True
     
     cfg.data.categories = ["Car", "DontCare", "Pedestrian", "Van", "Tram", "Misc", "Person_sitting", "Cyclist", "Truck"]
