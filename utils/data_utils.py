@@ -45,7 +45,6 @@ def parse_id_file(set_path, data_dir):
             label_path = os.path.join(data_dir, 'label_2', instance_str + '.txt')
             prev2_path = os.path.join(data_dir, 'prev_2', instance_str + '_02.png')
             
-
             # Filter: check if necessary files exist
             if not os.path.exists(prev2_path):
                 continue
@@ -59,6 +58,7 @@ def parse_id_file(set_path, data_dir):
                 "img_r_path": os.path.join(data_dir, 'prev_3', instance_str + '_01.png'),
                 "img_r_path_previous": os.path.join(data_dir, 'prev_3', instance_str + '_02.png'),
                 "calib_path": os.path.join(data_dir, 'calib', instance_str + '.txt'),
+                "lidar_path": os.path.join(data_dir, 'pcl', instance_str + '.bin')
             }
 
             if 'train' in data_dir:
@@ -307,48 +307,89 @@ def img_resize(img, target_size):
     
     resized_img = cv2.resize(img, (int(img.shape[1] * scale), int(img.shape[0] * scale)))
     
-    if scale_1 > scale_0:
+    if scale_1 > scale_0:  # need vertical crop
         start_y = (resized_img.shape[0] - target_size[0]) // 2
         end_y = start_y + target_size[0]
-        final_img = resized_img[start_y:end_y]
-        
-        assert final_img.shape[0] == target_size[0] and final_img.shape[1] == target_size[1]
-        
-        crop = (resized_img.shape[0] - target_size[0]) // 2
-        
-        return final_img, scale, crop, 'h'
-    else:
+        final_img = resized_img[start_y:end_y, :]
+        crop = start_y
+        direction = 'h'
+    else:  # need horizontal crop
         start_x = (resized_img.shape[1] - target_size[1]) // 2
         end_x = start_x + target_size[1]
-        final_img = resized_img[start_x:end_x]
+        final_img = resized_img[:, start_x:end_x]
+        crop = start_x
+        direction = 'w'
         
-        assert final_img.shape[0] == target_size[0] and final_img.shape[1] == target_size[1]
-        
-        crop = (resized_img.shape[1] - target_size[1]) // 2
-        
-        return final_img, scale, crop, 'w'
+    assert final_img.shape[0] == target_size[0] and final_img.shape[1] == target_size[1]
+    return final_img, scale, crop, direction
 
-# TODO: adjust it: do we change P or Intrinsics???
+def test_resize(img_path='/home/arash/SeaX3DIMG/dataset/training/image_2/000057.png'):
+    import matplotlib.pyplot as plt
+    import cv2
+
+    img_l = cv2.imread(img_path, cv2.IMREAD_COLOR)
+    img_l = cv2.cvtColor(img_l, cv2.COLOR_BGR2RGB)
+
+    target_sizes = [(200, 1242), (50, 1200), (375, 1000), (300, 300)]
+    imgs, infos = [img_l], ["Original"]
+
+    for tg_size in target_sizes:
+        resized, scale, crop, direction = img_resize(img_l, tg_size)
+        imgs.append(resized)
+        infos.append(f"{tg_size} | scale={scale:.2f} | crop={crop} ({direction})")
+
+    plt.figure(figsize=(18, 4))
+    for i, im in enumerate(imgs):
+        plt.subplot(1, len(imgs), i + 1)
+        plt.imshow(im)
+        plt.title(infos[i], fontsize=9)
+        plt.axis('off')
+    plt.tight_layout()
+    plt.show()
+
+
 def convert_calibration(P, scale, crop, direction):
     P = P.copy()
+
+    # scale intrinsics
+    P[0,0] *= scale
+    P[1,1] *= scale
+    P[0,2] *= scale
+    P[1,2] *= scale
+
+    # scale baseline translation if nonzero
+    P[0,3] *= scale
+    P[1,3] *= scale
+
+    # adjust for crop offset
+    if direction == 'h':  # vertical crop
+        P[1,2] -= crop
+    else:                 # horizontal crop
+        P[0,2] -= crop
+
+    return torch.from_numpy(P)
+
+def test_calib_transform(target_size = (288, 960),
+                         calib_path = '/home/arash/SeaX3DIMG/dataset/training/calib/000057.txt',
+                         img_path='/home/arash/SeaX3DIMG/dataset/training/image_2/000057.png'):
     
-    P[0, 0] *= scale  # fx
-    P[0, 2] *= scale  # cx
-    P[1, 1] *= scale  # fy
-    P[1, 2] *= scale  # cy
+    P = parse_calibration(calib_path)['P2']
     
-    P[0, 3] = (P[0, 3] / 1000.0) * scale  # tx in meters
-    P[1, 3] = (P[1, 3] / 1000.0) * scale  # ty in meters
-    P[2, 3] = P[2, 3] / 1000.0            # tz in meters (only divide, no image scale)
+    import cv2
+    img_l = cv2.imread(img_path, cv2.IMREAD_COLOR)
+    img_l = cv2.cvtColor(img_l, cv2.COLOR_BGR2RGB)
     
-    if direction == 'h':
-        # Account for vertical crop from top
-        P[1, 2] -= crop
-    else:
-        P[0, 2] -= crop
+    print(f"Original P for shape: {np.shape(img_l)} is: ")
+    print(P)
     
-    P = torch.from_numpy(P)
-    return P
+    final_img, scale, crop, direction = img_resize(img_l, target_size)
+    
+    P_conv = convert_calibration(P, scale, crop, direction)
+    
+    print(f"Converted P for shape: {target_size} is: ")
+    print(P_conv)
+    
+    return P_conv
 
 
 def img_normalize(img, mean, std):
@@ -445,6 +486,7 @@ def collate_fn(batch):
 
     if "label" in batch[0].keys():
         batch_dict['assignment'] = torch.stack([item['assignment'] for item in batch])
+        batch_dict['depth'] = torch.stack([item['depth'] for item in batch])
        #  batch_dict["assignment_bev"] = torch.stack([item['assignment_bev'] for item in batch])
         
         max_objects = batch[0]['valid_obj'].shape[0] # from dataset statistics

@@ -19,11 +19,13 @@ class kitti_sx3d(Dataset):
             self.DF = du.parse_id_file(self.cfg.data.path + 'train.txt', self.data_dir)
             self._label_parse()
             self._voxel_sup()
+            self._pcl_gen()
         elif self.mode == 'val':
             self.data_dir = self.cfg.data.path + 'training/'
             self.DF = du.parse_id_file(self.cfg.data.path + 'val.txt', self.data_dir)
             self._label_parse()
             self._voxel_sup()
+            self._pcl_gen()
         elif self.mode == 'test':
             self.data_dir = self.cfg.data.path + 'testing/'
             self.DF = du.parse_id_file(self.cfg.data.path + 'test.txt', self.data_dir)
@@ -48,6 +50,9 @@ class kitti_sx3d(Dataset):
         for instance in self.DF:
             instance["ass"], instance["c_vox"], instance["valid_obj"] = du.voxel_assigner(instance["labels"], self.cfg)
 
+    def _pcl_gen(self):
+        for instance in self.DF:
+            instance["depth"] = du.pcl_as_depth(instance["lidar_path"], self.cfg)
         
     def __getitem__(self, index):
         instance = self.DF[index]
@@ -85,6 +90,7 @@ class kitti_sx3d(Dataset):
         
         if "labels" in instance.keys():
             data["label"] = instance["labels"]
+            data["depth"] = instance["depth"]
             data["assignment"] = instance["ass"]
             data["center_voxel"] = instance["c_vox"]
             data["valid_obj"] = instance["valid_obj"]
