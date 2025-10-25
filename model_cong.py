@@ -17,6 +17,8 @@ Documentation:
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ.pop("CUDA_VISIBLE_DEVICES", None)
+
 
 from yacs.config import CfgNode as CN
 import numpy as np
