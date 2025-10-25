@@ -31,6 +31,7 @@ class Trainer:
                  optimizer, scheduler, loss_fn, resume_checkpoint=None):
         
         self.cfg = cfg
+        self.model = model
         self.device = self.cfg.device[0]
         self.dataset = dataset
         self.collate_fn = collate_fn
