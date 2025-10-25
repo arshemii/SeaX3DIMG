@@ -265,7 +265,7 @@ class loss3d(nn.Module):
         """
         assert gtl.shape == (len(prediction[0]), self.cfg.max_obj, 12), "Wrong gtl, Collate function must be checked!"
         
-        self.B = len(prediction)
+        self.B = len(prediction[0])
         self.loss = {}
         
         if self.B == 0:
