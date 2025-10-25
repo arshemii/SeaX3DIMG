@@ -122,8 +122,8 @@ def config_generator():
     cfg.model.sx3d.init_weight = True
     
     cfg.max_obj = 18
-    cfg.grid_size = (26.0, 10.0, 51.0)  # H from -2 to 10
-    cfg.grid_unc = (0.43, 0.50, 0.40)
+    cfg.grid_size = (20.0, 10.0, 45.0)  # H from -2 to 10
+    cfg.grid_unc = (0.85, 0.80, 0.80)
     cfg.grid_resolution = tuple(int(round(size / res)) for size, res in zip(cfg.grid_size, cfg.grid_unc))
 
     
