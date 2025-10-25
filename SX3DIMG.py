@@ -131,7 +131,7 @@ class SX3DIMG(nn.Module):
         # full_voxel[b, :, idx] += voxel[b, :, :]*conf[b,0,:]
         # vectorize using scatter_add:
         # expand valid_indices to shape (B, C, N_valid) for feature scattering
-        idx = valid_indices.view(1, 1, -1).expand(B, C, -1)  # (B, C, N_valid)
+        idx = valid_indices.reshape(1, 1, -1).expand(B, C, -1)  # (B, C, N_valid)
         # weights repeated to match channels
         w = conf_for_points.expand(B, C, -1)  # (B, C, N_valid)
     
@@ -142,7 +142,7 @@ class SX3DIMG(nn.Module):
         full_voxel = full_voxel.scatter_add(dim=2, index=idx, src=weighted_feats)
     
         # scatter_add weights into weight_accum
-        idx_w = valid_indices.view(1, 1, -1).expand(B, 1, -1)
+        idx_w = valid_indices.reshape(1, 1, -1).expand(B, 1, -1)
         weight_accum = weight_accum.scatter_add(dim=2, index=idx_w, src=conf_for_points)
     
         # avoid division by zero: mask where weight_accum == 0
