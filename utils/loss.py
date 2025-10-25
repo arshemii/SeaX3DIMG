@@ -222,9 +222,10 @@ class loss3d(nn.Module):
 
     def disparity_loss(self, disparity_pred, disparity_gtl):
         """        
-        disparity_pred:             [B, image_h / 4, image_w / 4]
+        disparity_pred:             [B, 1, image_h / 4, image_w / 4]
         disparity_gtl               [B, image_h / 4, image_w / 4]
         """
+        disparity_gtl = disparity_gtl.squeeze(1)
         
         if len(disparity_pred) != 0:
             assert disparity_gtl.shape == disparity_pred.shape
