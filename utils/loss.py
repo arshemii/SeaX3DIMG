@@ -228,7 +228,7 @@ class loss3d(nn.Module):
         disparity_gtl = disparity_gtl.squeeze(1)
         
         if len(disparity_pred) != 0:
-            assert disparity_gtl.shape == disparity_pred.shape, f"gt is {disparity_gtl.shape} but pred is {disparity_pred.shap}"
+            assert disparity_gtl.shape == disparity_pred.shape, f"gt is {disparity_gtl.shape} but pred is {disparity_pred.shape}"
             
             valid_depth_mask = (disparity_gtl > 0)
             
