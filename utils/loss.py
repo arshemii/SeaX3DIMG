@@ -26,6 +26,7 @@ class loss3d(nn.Module):
         self.beta = self.cfg.loss.beta
         self.object_threshold = self.cfg.loss.object_threshold_loss
         self.zeta = self.cfg.loss.zeta
+       	
 
     
     def object_conf_loss(self, pred_obj_logits, assignments):
@@ -226,6 +227,7 @@ class loss3d(nn.Module):
         disparity_gtl               [B, image_h / 4, image_w / 4]
         """
         #disparity_gtl = disparity_gtl.squeeze(1)
+        self.B = len(disparity_pred)
         
         if len(disparity_pred) != 0:
             assert disparity_gtl.shape == disparity_pred.shape, f"gt is {disparity_gtl.shape} but pred is {disparity_pred.shape}"
