@@ -42,7 +42,7 @@ class SX3DIMG(nn.Module):
                                         nn.BatchNorm3d(3),
                                         nn.ReLU(inplace=True))
         
-        self.conv_agg = nn.Sequential(nn.Conv3d(131, self.cfg.model.head.inplanes, 3, 3, padding=1, bias=False),
+        self.conv_agg = nn.Sequential(nn.Conv3d(131, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
                                         nn.BatchNorm3d(self.cfg.model.head.inplanes),
                                         nn.ReLU(inplace=True))
 
@@ -212,6 +212,7 @@ class SX3DIMG(nn.Module):
             assert memory is not None
             voxel = torch.cat([voxel, memory], dim=1)  # chanels --> 128 + 3
             voxel = self.conv_agg(voxel)  # reduce channels
+            print(voxel.shape)
             out = self.head(voxel) # 5 tensors
             if self.cfg.loss.aux_loss:
                 return out, disp_upsampled, forward_mem
