@@ -14,6 +14,10 @@ Documentation:
         z --> +94
 """
 
+import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+
 from yacs.config import CfgNode as CN
 import numpy as np
 import torch
