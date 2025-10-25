@@ -435,27 +435,27 @@ def project_rect_to_image(pts_3d_rect, P2):
     return a, b
 
 def create_depth_map(pcc, P2, im_shape=(375, 1242)):
-    """Create sparse depth map from LiDAR points."""
     pts_img, depth = project_rect_to_image(pcc, P2)
     u, v = pts_img[:, 0], pts_img[:, 1]
+
+    # Remove NaN / Inf depth
+    valid = (~np.isnan(u)) & (~np.isnan(v)) & (~np.isinf(u)) & (~np.isinf(v)) & (depth > 0)
+    u, v, depth = u[valid], v[valid], depth[valid]
 
     # Round to nearest pixel indices
     u = np.round(u).astype(np.int32)
     v = np.round(v).astype(np.int32)
 
     # Filter valid points inside image bounds
-    valid = (u >= 0) & (v >= 0) & (u < im_shape[1]) & (v < im_shape[0]) & (depth > 0)
+    valid = (u >= 0) & (v >= 0) & (u < im_shape[1]) & (v < im_shape[0])
     u, v, depth = u[valid], v[valid], depth[valid]
 
-    # Initialize empty depth map
     depth_map = np.zeros(im_shape, dtype=np.float32)
 
-    # Handle overlapping pixels (keep nearest)
     for i in range(len(depth)):
         if depth_map[v[i], u[i]] == 0 or depth[i] < depth_map[v[i], u[i]]:
             depth_map[v[i], u[i]] = depth[i]
 
-    # Convert to torch tensor if needed
     return torch.from_numpy(depth_map)
 
 def pcl_as_depth(pcl_path, cfg):
@@ -466,6 +466,8 @@ def pcl_as_depth(pcl_path, cfg):
     pcc_img = create_depth_map(pcc, cfg.camera.P_l[0], cfg.model.in_size)
     
     gt_disp = (cfg.camera.focal[0] * cfg.camera.base[0]) / pcc_img
+    
+    gt_disp[pcc_img == 0] = 0  # avoid division by zero
     
     gt_disp = gt_disp.unsqueeze(0).unsqueeze(0) 
     
@@ -499,7 +501,7 @@ def collate_fn(batch):
 
     if "label" in batch[0].keys():
         batch_dict['assignment'] = torch.stack([item['assignment'] for item in batch])
-        batch_dict['depth'] = torch.stack([item['depth'] for item in batch])
+        batch_dict['disparity'] = torch.stack([item['depth'] for item in batch])
        #  batch_dict["assignment_bev"] = torch.stack([item['assignment_bev'] for item in batch])
         
         max_objects = batch[0]['valid_obj'].shape[0] # from dataset statistics
