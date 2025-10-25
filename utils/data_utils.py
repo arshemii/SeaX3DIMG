@@ -496,7 +496,7 @@ def pcl_as_depth(pcl_path, cfg):
     gt_disp = gt_disp.unsqueeze(0).unsqueeze(0)
     pcl_down = F.interpolate(gt_disp, scale_factor=0.25, mode='bilinear', align_corners=False)
 
-    return pcl_down.squeeze(0).squeeze(0)
+    return pcl_down.squeeze(0)
     
 
 def get_focal_baseline(P2):
