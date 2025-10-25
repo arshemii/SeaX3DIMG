@@ -28,11 +28,11 @@ from utils.grid_generator import GridGenerator, cam_to_img, grid_for_sample, oob
 
 def grid_setup(grid_size, grid_unc, input_size, H_off, p_l):
     grid_obj = GridGenerator(grid_size, grid_unc, H_off) # points in cam coordinates
-    grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32)
+    grid = grid_obj.get_grid()['grid'].to(dtype=torch.float32)  # 3d gird
     grid_forward = grid.permute(1,2,3,0)
-    grid_img = cam_to_img(grid, p_l)
+    grid_img = cam_to_img(grid, p_l)  # grid point on image frame
     oob_mask = oob_voxels(grid_img, input_size)
-    oob_mask_valid = ~oob_mask
+    oob_mask_valid = ~oob_mask    # points outside of the camera FOV are False
     oob_mask_flat = oob_mask_valid.view(-1)
     grid_flat = grid_for_sample(grid_img, input_size)
     grid_flat_filtered = grid_flat[0][oob_mask_flat]

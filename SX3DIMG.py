@@ -20,10 +20,10 @@ class SX3DIMG(nn.Module):
         self.device = self.cfg.device[0]
         
         self.h, self.w = self.cfg.model.in_size
-        self.num_voxels = self.cfg.grid_resolution[0] * self.cfg.grid_resolution[1] * self.cfg.grid_resolution[2]
+        self.num_voxels = self.cfg.grid_resolution[0] * self.cfg.grid_resolution[1] * self.cfg.grid_resolution[2] # 153600
         
-        self.oob_mask_flat = self.cfg.oob_mask_valid[0]
-        self.grid_flat_filtered = self.cfg.grid_flat_filtered[0].unsqueeze(0).to(self.device)
+        self.oob_mask_flat = self.cfg.oob_mask_flat[0]
+        self.grid_flat_filtered = self.cfg.grid_flat_filtered[0].unsqueeze(0).to(self.device) # torch.Size([1, 104031, 1, 2])
         
         self.backbone = self.feature_net()
         self._init_head()
@@ -172,7 +172,7 @@ class SX3DIMG(nn.Module):
         else:
             conf_sampled = None
     
-        valid_indices = self.oob_mask_flat.nonzero(as_tuple=False).squeeze(1).to(tensor.device)  # (N_valid,)
+        valid_indices = self.oob_mask_flat.nonzero(as_tuple=False).squeeze(1).to(tensor.device)  # (N_valid,) 104031
     
         full_voxel_flat = self._voxel_filler(sampled, valid_indices, conf_for_points=conf_sampled)  # (B,256,num_voxels)
     
