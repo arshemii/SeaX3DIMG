@@ -294,7 +294,6 @@ class loss3d(nn.Module):
         
         if self.cfg.loss.aux_loss:
             assert disparity_pred != None and disparity_gtl != None
-            # yaw angle loss
             self.loss['disparity_loss'] = self.disparity_loss(disparity_pred, disparity_gtl)
 
         # Total loss: Sum of all loss considering their importance based on self.loss_weights

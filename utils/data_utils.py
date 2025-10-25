@@ -134,14 +134,14 @@ def parse_label(label_path, cfg):
             
             one_det_in_instance = {
                 'category': torch.tensor([category]),
-                'bbox2d': torch.from_numpy(box_generator_2d(det)),
+                # 'bbox2d': torch.from_numpy(box_generator_2d(det)),
                 'bbox3d': torch.from_numpy(box_generator_3d(det)),
                 'truncation': det[1],
                 'occlusion': int(det[2]),
                 'angle_observation': det[3],
                 'score': score}
-            bbox_bev = box_generator_3d_to_bev(box_generator_3d(det))
-            one_det_in_instance['bbox_bev'] = torch.from_numpy(bbox_bev)
+            #bbox_bev = box_generator_3d_to_bev(box_generator_3d(det))
+            #one_det_in_instance['bbox_bev'] = torch.from_numpy(bbox_bev)
             
             if cfg.short_grid_range:
                 x = one_det_in_instance['bbox3d'][3]

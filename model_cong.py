@@ -37,7 +37,7 @@ def grid_setup(grid_size, grid_unc, input_size, H_off, p_l):
     grid_flat = grid_for_sample(grid_img, input_size)
     grid_flat_filtered = grid_flat[0][oob_mask_flat]
     
-    return [grid], [grid_forward], [oob_mask_valid], [oob_mask_flat], [grid_flat_filtered]
+    return [grid_forward], [oob_mask_valid], [oob_mask_flat], [grid_flat_filtered]
 
 def config_generator():
     cfg = CN()
@@ -70,8 +70,8 @@ def config_generator():
     cfg.debug = False
     cfg.debug_loss = False
     
-    cfg.device = ['cpu']
-    #cfg.device = [torch.device('cuda' if torch.cuda.is_available() else 'cpu')]
+    #cfg.device = ['cpu']
+    cfg.device = [torch.device('cuda' if torch.cuda.is_available() else 'cpu')]
     
     # Model params
     cfg.model.num_class = 4
@@ -136,7 +136,7 @@ def config_generator():
     cfg.H_max = cfg.grid_size[1]/2 + cfg.H_off
     
     
-    cfg.grid, cfg.grid_forward, cfg.oob_mask_valid, cfg.oob_mask_flat, cfg.grid_flat_filtered = grid_setup(cfg.grid_size,
+    cfg.grid_forward, cfg.oob_mask_valid, cfg.oob_mask_flat, cfg.grid_flat_filtered = grid_setup(cfg.grid_size,
                                                                                                     cfg.grid_unc, cfg.model.in_size,
                                                                                                     cfg.H_off, cfg.camera.P_l[0])    
     cfg.model.sx3d.is_confidence = True
@@ -203,6 +203,7 @@ def config_generator():
     cfg.loss.beta = 1.0
     cfg.loss.object_threshold_loss = 0.5
     cfg.loss.zeta = 0.5    # to penalize background voxels if objectness is high
+    cfg.loss.optimized = True
     
 
     cfg.eval.save_dir = './eval_dir/'

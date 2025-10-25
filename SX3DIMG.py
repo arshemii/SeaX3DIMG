@@ -172,6 +172,7 @@ class SX3DIMG(nn.Module):
         else:
             conf_sampled = None
     
+        del grid_batched
         valid_indices = self.oob_mask_flat.nonzero(as_tuple=False).squeeze(1).to(tensor.device)  # (N_valid,) 104031
     
         full_voxel_flat = self._voxel_filler(sampled, valid_indices, conf_for_points=conf_sampled)  # (B,256,num_voxels)
@@ -180,6 +181,8 @@ class SX3DIMG(nn.Module):
                                              self.cfg.grid_resolution[1],
                                              self.cfg.grid_resolution[2])
     
+        
+        del full_voxel_flat
         return full_voxel
         
     def forward(self, img_l, img_r, memory, create_memory = False):

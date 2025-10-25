@@ -39,6 +39,9 @@ class Trainer:
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.scheduler = scheduler
+        
+        if self.cfg.loss.optimized:
+            self.loss_weights = self.cfg.loss.weight
 
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
@@ -71,11 +74,6 @@ class Trainer:
             batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
             batch["right_img_previous"] = batch["right_img_previous"].to(self.device)
-            batch["label"] = batch["label"].to(self.device)
-            batch['assignment'] = batch['assignment'].to(self.device)
-            
-            if self.cfg.loss.aux_loss:
-                batch["disparity"] = batch["disparity"].to(self.device)
             
             self.optimizer.zero_grad()
             
@@ -85,6 +83,8 @@ class Trainer:
                 temporal = self.model(batch["left_img_previous"], batch["right_img_previous"],
                                      None, create_memory = True)
                 
+                del batch["left_img_previous"], batch["right_img_previous"]
+                
                 if self.cfg.loss.aux_loss:
                     outputs, disp, _ = self.model(batch["left_img"], batch["right_img"],
                                                   temporal, create_memory = False)
@@ -93,14 +93,55 @@ class Trainer:
                                             temporal, create_memory = False)
                     disp = None
                 
-                del temporal
+                obj = outputs[0]
+                dim = outputs[1]
+                centerx = outputs[2]
+                cls_logits = outputs[3]
+                yaw = outputs[4]
+                
+                del temporal, batch["left_img"], batch["right_img"], outputs
                 
                 assert "label" in batch.keys()
                 
-                loss = self.loss_fn(outputs, disp, batch["label"],
-                                    batch['assignment'], batch["disparity"])
+                batch["label"] = batch["label"].to(self.device)
+                batch['assignment'] = batch['assignment'].to(self.device)
+                if self.cfg.loss.aux_loss:
+                    batch["disparity"] = batch["disparity"].to(self.device)
+                
+                
+                if self.cfg.loss.optimized:
+                    loss = {}
+                    if self.cfg.loss.aux_loss:
+                        loss['disparity_loss'] = self.loss_fn.disparity_loss(disp, batch["disparity"])
+                        del disp, batch["disparity"]
+                        
+                    loss['obj_conf'] = self.loss_fn.object_conf_loss(obj, batch['assignment'])
+                    loss['cls_loss'] = self.loss_fn.classification_loss(cls_logits, obj,
+                                                                        batch['assignment'], batch["label"])
+                    del cls_logits, obj
+                    loss['center_loss'] = self.loss_fn.center_loss(centerx, batch['assignment'], batch["label"])
+                    del centerx
+                    loss['dim_loss'] = self.loss_fn.dimension_loss(dim, batch['assignment'], batch["label"])
+                    del dim
+                    
+                    # yaw angle loss
+                    loss['yaw_angle_loss'] = self.loss_fn.yaw_loss(yaw, batch['assignment'], batch["label"])
+                    del yaw
+                    
+                    loss['total'] = self.loss_weights[0] * loss['obj_conf'] + \
+                                            self.loss_weights[1] * loss['cls_loss'] + \
+                                            self.loss_weights[2] * loss['center_loss'] + \
+                                            self.loss_weights[3] * loss['dim_loss'] + \
+                                            self.loss_weights[4] * loss['yaw_angle_loss']
+                                            
+                    if self.cfg.loss.aux_loss:
+                        loss['total'] += self.loss_weights[5] * loss['disparity_loss']
+                    
+                else:
+                    loss = self.loss_fn((obj, dim, centerx, cls_logits, yaw), disp, batch["label"],
+                                        batch['assignment'], batch["disparity"])
 
-                del outputs
+                del batch["label"], batch['assignment']
                 
             # TODO: must be removed
             if torch.isnan(loss['total']) or loss['total'].item() == 0.0:
