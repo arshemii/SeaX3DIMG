@@ -90,7 +90,7 @@ class kitti_sx3d(Dataset):
         
         if "labels" in instance.keys():
             data["label"] = instance["labels"]
-            data["depth"] = instance["depth"]
+            data["disparity"] = instance["depth"]
             data["assignment"] = instance["ass"]
             data["center_voxel"] = instance["c_vox"]
             data["valid_obj"] = instance["valid_obj"]

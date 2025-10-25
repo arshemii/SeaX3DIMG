@@ -32,7 +32,6 @@ class Trainer:
         
         self.cfg = cfg
         self.device = self.cfg.device[0]
-        self.model = model.to(self.device)
         self.dataset = dataset
         self.collate_fn = collate_fn
         self.num_epochs = self.cfg.dev.num_epoch
@@ -43,7 +42,7 @@ class Trainer:
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
         
-        self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_bev
+        self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_3d
         self.log_dir = self.cfg.log_dir
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         os.makedirs(self.log_dir, exist_ok=True)
@@ -58,50 +57,48 @@ class Trainer:
                                      collate_fn=self.collate_fn, num_workers=self.num_workers)
     
     def _print_train_stats(self, epoch, avg_loss, train_time):
-        # TODO: use method print_metrics from metric_module object
         print(f"Training epoch {epoch} with loss {avg_loss:.2f} in {train_time:.2f}")
     
     def train_epoch(self, epoch):
-        self.model.train()
         running_loss = 0.0
         avg_loss = 0.0
                 
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         for batch_idx, batch in pbar:
                         
-            # batch["calib"] = batch["calib"].to(self.device)
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
+            batch["right_img_previous"] = batch["right_img_previous"].to(self.device)
             batch["label"] = batch["label"].to(self.device)
             batch['assignment'] = batch['assignment'].to(self.device)
-            batch['assignment_bev'] = batch['assignment_bev'].to(self.device)
             
             if self.cfg.loss.aux_loss:
-                batch["disparity_gt"] = batch["disparity_gt"].to(self.device)
+                batch["disparity"] = batch["disparity_gt"].to(self.device)
             
             self.optimizer.zero_grad()
             
             #create temporal memory for both left and right image from t - dt
             with autocast(device_type='cuda'):
-                temporal_l = self.model.create_memory(batch["left_img_previous"])
-                if self.cfg.loss.aux_loss:
-                    outputs, _, disp, conf = self.model(batch["left_img"], batch["right_img"], temporal_l)
-                else:
-                    outputs = self.model(batch["left_img"], batch["right_img"], temporal_l)[0]
                 
-                # TODO: reduce memory oh
-                del temporal_l
+                temporal = self.model(batch["left_img_previous"], batch["right_img_previous"],
+                                     None, create_memory = True)
+                
+                if self.cfg.loss.aux_loss:
+                    outputs, disp, _ = self.model(batch["left_img"], batch["right_img"],
+                                                  temporal, create_memory = False)
+                else:
+                    outputs, _ = self.model(batch["left_img"], batch["right_img"],
+                                            temporal, create_memory = False)
+                    disp = None
+                
+                del temporal
                 
                 assert "label" in batch.keys()
-                if self.cfg.loss.aux_loss:
-                    loss = self.loss_fn(outputs, batch["label"], batch['assignment'],
-                                        batch['assignment_bev'], disp, batch["disparity_gt"],conf)
-                else:
-                    loss = self.loss_fn(outputs, batch["label"], batch['assignment'],
-                                        batch['assignment_bev'], None, None, None)
                 
-                # TODO: reduce overhead
+                loss = self.loss_fn(outputs, disp, batch["label"],
+                                    batch['assignment'], batch["disparity"])
+
                 del outputs
                 
             # TODO: must be removed

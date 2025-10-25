@@ -45,19 +45,16 @@ def training(cfg):
     from utils.data_utils import collate_fn
     from utils.kitti_sx3d import kitti_sx3d
     from SX3DIMG import get_SX3D_model
-    from utils.loss import loss_bev
+    from utils.loss import loss3d
     
     device = cfg.device[0]
     
     model = get_SX3D_model(cfg)
     model.to(device)
-    cfg.oob_mask_valid = model.return_boundary_mask()
     model.train()
     
     dataset = kitti_sx3d(cfg)
-    
-    cfg.grid[0] = cfg.grid[0].to(device)
-        
+            
     optimizer = torch.optim.AdamW(model.parameters(),
                                   lr = cfg.dev.lr, weight_decay = cfg.dev.weight_decay)
     if cfg.dev.scheduler == 'CAlr':
@@ -72,20 +69,15 @@ def training(cfg):
         raise NotImplementedError("No other scheduler is implemented!")
         
 
-    loss_fn = loss_bev(cfg)
+    loss_fn = loss3d(cfg)
             
-    if cfg.model.head == 'bev_box':
-        if len(os.listdir(cfg.model.sx3d.checkpoint_bev)) == 0:
-            resume_checkpoint = None
-        else:
-            resume_checkpoint = max(glob.glob("./checkpoints_bev/checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
-            print(f"Start training with {resume_checkpoint}")
-    elif cfg.model.head == 'bev_occupancy':
-        raise NotImplementedError("Only bev_box can be selected now")
+
+    if len(os.listdir(cfg.model.sx3d.checkpoint_3d)) == 0:
+        resume_checkpoint = None
     else:
-        raise NotImplementedError("Only 'box2d' and bev_occupancy' are available!")
-        
-    
+        resume_checkpoint = max(glob.glob("./checkpoint_3d/checkpoint_epoch_*.pth"), key=lambda x: int(re.findall(r'\d+', x)[-1]))
+        print(f"Start training with {resume_checkpoint}")
+
     trainer = Trainer(cfg, model, dataset, collate_fn,
                  optimizer, scheduler, loss_fn, resume_checkpoint)
     

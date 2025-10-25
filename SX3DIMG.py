@@ -20,7 +20,6 @@ class SX3DIMG(nn.Module):
         self.device = self.cfg.device[0]
         
         self.h, self.w = self.cfg.model.in_size
-        self.grid = cfg.grid[0].permute(3,0,1,2).to(dtype=torch.float32)
         self.num_voxels = self.cfg.grid_resolution[0] * self.cfg.grid_resolution[1] * self.cfg.grid_resolution[2]
         
         self.oob_mask_flat = self.cfg.oob_mask_valid[0]

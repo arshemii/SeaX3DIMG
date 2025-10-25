@@ -10,9 +10,9 @@ import torch
 import math
     
 
-class loss_bev(nn.Module):
+class loss3d(nn.Module):
     def __init__(self, cfg):
-        super(loss_bev, self).__init__()
+        super(loss3d, self).__init__()
         self.cfg = cfg
         
         self.grid = cfg.grid[0]

@@ -403,78 +403,102 @@ def img_normalize(img, mean, std):
     return img.to(torch.float32)
 
 def project_ref_to_rect(pts_3d_ref, R0):
-        ''' Input and Output are nx3 points '''
-        return np.transpose(np.dot(R0, np.transpose(pts_3d_ref)))
+    """ Input and Output are nx3 points """
+    return (R0 @ pts_3d_ref.T).T
 
 def cart2hom(pts_3d):
-        ''' Input: nx3 points in Cartesian
-            Oupput: nx4 points in Homogeneous by pending 1
-        '''
-        n = pts_3d.shape[0]
-        pts_3d_hom = np.hstack((pts_3d, np.ones((n,1))))
-        return pts_3d_hom
+    """ Cartesian to homogeneous coordinates """
+    n = pts_3d.shape[0]
+    pts_3d_hom = np.hstack((pts_3d, np.ones((n,1))))
+    return pts_3d_hom
 
 def project_velo_to_ref(pts_3d_velo, V2C):
-        pts_3d_velo = cart2hom(pts_3d_velo) # nx4
-        return np.dot(pts_3d_velo, np.transpose(V2C))
+    pts_3d_hom = cart2hom(pts_3d_velo)  # nx4
+    return pts_3d_hom @ V2C.T
 
 def project_velo_to_rect(pts_3d_velo, cfg):
-        pts_3d_ref = project_velo_to_ref(pts_3d_velo, cfg.camera.V2C[0])
-        return project_ref_to_rect(pts_3d_ref, cfg.camera.R0[0])
+    pts_3d_ref = project_velo_to_ref(pts_3d_velo, cfg.camera.V2C[0].numpy())
+    return project_ref_to_rect(pts_3d_ref, cfg.camera.R0[0].numpy())
 
-def project_rect_to_image(pts_3d_rect, P2):
-    """Project rectified camera coordinates to image plane."""
-    pts_3d_hom = cart2hom(pts_3d_rect)       # [N,4]
-    pts_2d = np.dot(pts_3d_hom, P2.T)        # [N,3]
-    pts_2d[:, 0] /= pts_2d[:, 2]             # u = x / z
-    pts_2d[:, 1] /= pts_2d[:, 2]             # v = y / z
-    
-    a = pts_2d[:, :2]
-    b = pts_3d_rect[:, 2]
-    
-    return a, b
+
+def project_rect_to_image(pts_3d_rect, P2, im_shape):
+    """Project rectified camera coordinates to image plane safely."""
+    # Remove invalid 3D points
+    mask_valid = (~np.isnan(pts_3d_rect).any(axis=1)) & (~np.isinf(pts_3d_rect).any(axis=1))
+    pts_3d_rect = pts_3d_rect[mask_valid]
+
+    if pts_3d_rect.shape[0] == 0:
+        return np.array([]), np.array([]), np.array([])
+
+    # Only keep points in front of the camera
+    mask_front = pts_3d_rect[:, 2] > 0.2
+    pts_3d_rect = pts_3d_rect[mask_front]
+
+    if pts_3d_rect.shape[0] == 0:
+        return np.array([]), np.array([]), np.array([])
+
+    # Project to image plane
+    pts_3d_hom = cart2hom(pts_3d_rect)  # [N, 4]
+    pts_2d = pts_3d_hom @ P2.T          # [N, 3]
+
+    # Safe division
+    z = pts_2d[:, 2]
+    u = pts_2d[:, 0] / z
+    v = pts_2d[:, 1] / z
+
+    # Remove invalid or NaN/Inf
+    mask_final = (~np.isnan(u)) & (~np.isnan(v)) & (~np.isinf(u)) & (~np.isinf(v))
+    u, v = u[mask_final], v[mask_final]
+    pts_3d_rect = pts_3d_rect[mask_final]
+
+    # Keep only points inside image bounds
+    H, W = im_shape[:2]
+    mask_img = (u >= 0) & (v >= 0) & (u < W) & (v < H)
+    u, v = u[mask_img], v[mask_img]
+    depth = pts_3d_rect[mask_img, 2]
+
+    return u, v, depth
 
 def create_depth_map(pcc, P2, im_shape=(375, 1242)):
-    pts_img, depth = project_rect_to_image(pcc, P2)
-    u, v = pts_img[:, 0], pts_img[:, 1]
+    u, v, depth = project_rect_to_image(pcc, P2, im_shape)
 
-    # Remove NaN / Inf depth
-    valid = (~np.isnan(u)) & (~np.isnan(v)) & (~np.isinf(u)) & (~np.isinf(v)) & (depth > 0)
-    u, v, depth = u[valid], v[valid], depth[valid]
+    # Round to nearest pixel indices safely
+    u_idx = np.round(u).astype(np.int32)
+    v_idx = np.round(v).astype(np.int32)
 
-    # Round to nearest pixel indices
-    u = np.round(u).astype(np.int32)
-    v = np.round(v).astype(np.int32)
-
-    # Filter valid points inside image bounds
-    valid = (u >= 0) & (v >= 0) & (u < im_shape[1]) & (v < im_shape[0])
-    u, v, depth = u[valid], v[valid], depth[valid]
+    # Filter inside image bounds AND remove any NaN/Inf that slipped through rounding
+    valid = (u_idx >= 0) & (v_idx >= 0) & (u_idx < im_shape[1]) & (v_idx < im_shape[0]) & np.isfinite(u_idx) & np.isfinite(v_idx)
+    u_idx, v_idx, depth = u_idx[valid], v_idx[valid], depth[valid]
 
     depth_map = np.zeros(im_shape, dtype=np.float32)
 
-    for i in range(len(depth)):
-        if depth_map[v[i], u[i]] == 0 or depth[i] < depth_map[v[i], u[i]]:
-            depth_map[v[i], u[i]] = depth[i]
+    for ui, vi, d in zip(u_idx, v_idx, depth):
+        # keep nearest point in case of multiple LiDAR hits per pixel
+        if depth_map[vi, ui] == 0 or d < depth_map[vi, ui]:
+            depth_map[vi, ui] = d
 
     return torch.from_numpy(depth_map)
 
 def pcl_as_depth(pcl_path, cfg):
-    pcl = np.fromfile(pcl_path, dtype=np.float32).reshape(-1, 4)[:, :3]  # [N, 3] forward dis, left distance, up distance
-    
+    """Load LiDAR, project to image, convert to disparity, downsample safely"""
+    pcl = np.fromfile(pcl_path, dtype=np.float32).reshape(-1, 4)[:, :3]  # [N,3]
     pcc = project_velo_to_rect(pcl, cfg)
-    
-    pcc_img = create_depth_map(pcc, cfg.camera.P_l[0], cfg.model.in_size)
-    
-    gt_disp = (cfg.camera.focal[0] * cfg.camera.base[0]) / pcc_img
-    
-    gt_disp[pcc_img == 0] = 0  # avoid division by zero
-    
-    gt_disp = gt_disp.unsqueeze(0).unsqueeze(0) 
-    
+    pcc_img = create_depth_map(pcc, cfg.camera.P_l[0].numpy(), cfg.model.in_size)
+
+    # convert to disparity (focal * baseline / depth)
+    focal = cfg.camera.focal[0]
+    baseline = cfg.camera.base[0]
+    gt_disp = torch.zeros_like(pcc_img)
+    valid_mask = pcc_img > 0
+    gt_disp[valid_mask] = (focal * baseline) / pcc_img[valid_mask]
+
+    # Add batch and channel dims for interpolation
+    gt_disp = gt_disp.unsqueeze(0).unsqueeze(0)
     pcl_down = F.interpolate(gt_disp, scale_factor=0.25, mode='bilinear', align_corners=False)
+
+    return pcl_down.squeeze(0).squeeze(0)
     
-    return pcl_down.squeeze(0).squeeze(0) 
-    
+
 def get_focal_baseline(P2):
 
     f = P2[0, 0]
