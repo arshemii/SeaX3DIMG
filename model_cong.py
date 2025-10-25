@@ -17,6 +17,7 @@ Documentation:
 from yacs.config import CfgNode as CN
 import numpy as np
 import torch
+import utils.data_utils as du
 from utils.grid_generator import GridGenerator, cam_to_img, grid_for_sample, oob_voxels
 
 def grid_setup(grid_size, grid_unc, input_size, H_off, p_l):
@@ -105,6 +106,11 @@ def config_generator():
                                        [ 1.480249e-02,  7.280733e-04, -9.998902e-01, -7.631618e-02],
                                        [ 9.998621e-01,  7.523790e-03,  1.480755e-02, -2.717806e-01],
                                        ], dtype=torch.float32)]
+    cfg.camera.disp = [du.get_focal_baseline(cfg.camera.P_l[0])]
+    
+    cfg.camera.focal = [cfg.camera.disp[0][0]]
+    cfg.camera.base = [cfg.camera.disp[0][1]]
+    
     
     cfg.radar_fusion = False
     cfg.model.sx3d.init_weight = True
@@ -141,7 +147,6 @@ def config_generator():
     cfg.data.mean = [np.array([0.485, 0.456, 0.406])]
     cfg.data.std = [np.array([0.229, 0.224, 0.225])]
     cfg.data.img_layout = 'rgb'
-    cfg.data.max_obj_per_frame = 15
     
     
     cfg.model.back.out = "features"
@@ -182,7 +187,7 @@ def config_generator():
                             "FINAL_CONV_KERNEL": 1}]
 
 
-    cfg.loss.weight = [1.0, 1.0, 0.75, 0.65, 0.2]
+    cfg.loss.weight = [1.0, 1.0, 0.75, 0.65, 0.35]
     cfg.loss.aux_loss = True
     if cfg.loss.aux_loss:
         cfg.loss.weight.append(0.3)

@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 import torch
 import os
+import torch.nn.functional as F
 
 def box_generator_2d(detection):
     # order: xmin, ymin, xmax, ymax, yaw
@@ -58,7 +59,7 @@ def parse_id_file(set_path, data_dir):
                 "img_r_path": os.path.join(data_dir, 'prev_3', instance_str + '_01.png'),
                 "img_r_path_previous": os.path.join(data_dir, 'prev_3', instance_str + '_02.png'),
                 "calib_path": os.path.join(data_dir, 'calib', instance_str + '.txt'),
-                "lidar_path": os.path.join(data_dir, 'pcl', instance_str + '.bin')
+                "lidar_path": os.path.join(data_dir, 'velodyne', instance_str + '.bin')
             }
 
             if 'train' in data_dir:
@@ -464,9 +465,21 @@ def pcl_as_depth(pcl_path, cfg):
     
     pcc_img = create_depth_map(pcc, cfg.camera.P_l[0], cfg.model.in_size)
     
-    return pcc_img
+    gt_disp = (cfg.camera.focal[0] * cfg.camera.base[0]) / pcc_img
     
+    gt_disp = gt_disp.unsqueeze(0).unsqueeze(0) 
+    
+    pcl_down = F.interpolate(gt_disp, scale_factor=0.25, mode='bilinear', align_corners=False)
+    
+    return pcl_down.squeeze(0).squeeze(0) 
+    
+def get_focal_baseline(P2):
 
+    f = P2[0, 0]
+
+    B = -P2[0, 3] / f
+
+    return f, B
 
 def collate_fn(batch):
     # a batch is a list
@@ -491,7 +504,6 @@ def collate_fn(batch):
         
         max_objects = batch[0]['valid_obj'].shape[0] # from dataset statistics
         feature_number = (7   # bbox 3d
-                          + 5  # bbox bev
                           + 1  # category
                           + 3  # i, j, k of closest voxel
                           + 1)  # valid mask
@@ -500,12 +512,14 @@ def collate_fn(batch):
         
         for batch_num, item in enumerate(batch):
             label_p_f = item["label"]
-            labels[batch_num, :, 13:16] = item['center_voxel'].to(dtype=torch.float32)
-            labels[batch_num, :, 16] = item['valid_obj'].to(dtype=torch.float32)
+            labels[batch_num, :, 8:11] = item['center_voxel'].to(dtype=torch.float32)
+            labels[batch_num, :, 11] = item['valid_obj'].to(dtype=torch.float32)
             for idx, obj in enumerate(label_p_f):
-                # labels[batch_num, idx, 0:7] = obj['bbox3d'].to(dtype=torch.float32)
-                labels[batch_num, idx, 7:12] = obj['bbox_bev'].to(dtype=torch.float32)
-                labels[batch_num, idx, 12] = obj['category'].to(dtype=torch.float32)
+                bbox3d = torch.as_tensor(obj['bbox3d'], dtype=torch.float32)
+                bbox3d = bbox3d[[1, 0, 2, 3, 4, 5, 6]]
+                labels[batch_num, idx, 0:7] = bbox3d
+                # labels[batch_num, idx, 7:12] = obj['bbox_bev'].to(dtype=torch.float32)
+                labels[batch_num, idx, 7] = obj['category'].to(dtype=torch.float32)
             
         batch_dict['label'] = labels
         

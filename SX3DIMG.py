@@ -213,7 +213,7 @@ class SX3DIMG(nn.Module):
             assert memory is not None
             voxel = torch.cat([voxel, memory], dim=1)  # chanels --> 128 + 3
             voxel = self.conv_agg(voxel)  # reduce channels
-            out = self.head(voxel)
+            out = self.head(voxel) # 5 tensors
             if self.cfg.loss.aux_loss:
                 return out, disp_upsampled, forward_mem
             else:
