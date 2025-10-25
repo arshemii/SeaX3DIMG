@@ -70,8 +70,8 @@ def config_generator():
     cfg.debug = False
     cfg.debug_loss = False
     
-    #cfg.device = ['cpu']
-    cfg.device = [torch.device('cuda' if torch.cuda.is_available() else 'cpu')]
+    cfg.device = ['cpu']
+    #cfg.device = [torch.device('cuda' if torch.cuda.is_available() else 'cpu')]
     
     # Model params
     cfg.model.num_class = 4
