@@ -263,7 +263,7 @@ class loss3d(nn.Module):
         disparity_pred:                     [B, 1, 128, 240]
         disparity_gtl:                      [B, 1, 128, 240]
         """
-        assert gtl.shape == (len(prediction), self.cfg.max_obj, 12), "Wrong gtl, Collate function must be checked!"
+        assert gtl.shape == (len(prediction[0]), self.cfg.max_obj, 12), "Wrong gtl, Collate function must be checked!"
         
         self.B = len(prediction)
         self.loss = {}
