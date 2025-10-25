@@ -50,17 +50,17 @@ def training(cfg):
     
     device = cfg.device[0]
     
-    # Preparing the model ...
+    print("Preparing the model ...")
     
     model = get_SX3D_model(cfg)
     model.to(device)
     model.train()
     
-    # Preparing dataset ...
+    print("Preparing dataset ...")
     
     dataset = kitti_sx3d(cfg)
     
-    # Dataset is ready. wooooow!
+    print("Dataset is ready. wooooow!")
          
     optimizer = torch.optim.AdamW(model.parameters(),
                                   lr = cfg.dev.lr, weight_decay = cfg.dev.weight_decay)
