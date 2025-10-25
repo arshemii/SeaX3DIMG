@@ -525,7 +525,7 @@ def collate_fn(batch):
 
     if "label" in batch[0].keys():
         batch_dict['assignment'] = torch.stack([item['assignment'] for item in batch])
-        batch_dict['disparity'] = torch.stack([item['depth'] for item in batch])
+        batch_dict['disparity'] = torch.stack([item['disparity'] for item in batch])
        #  batch_dict["assignment_bev"] = torch.stack([item['assignment_bev'] for item in batch])
         
         max_objects = batch[0]['valid_obj'].shape[0] # from dataset statistics
