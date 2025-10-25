@@ -74,7 +74,7 @@ class Trainer:
             batch['assignment'] = batch['assignment'].to(self.device)
             
             if self.cfg.loss.aux_loss:
-                batch["disparity"] = batch["disparity_gt"].to(self.device)
+                batch["disparity"] = batch["disparity"].to(self.device)
             
             self.optimizer.zero_grad()
             
