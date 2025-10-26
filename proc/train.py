@@ -121,6 +121,11 @@ class Trainer:
                     del cls_logits, obj
                     loss['center_loss'] = self.loss_fn.center_loss(centerx, batch['assignment'], batch["label"])
                     del centerx
+                    
+                    # if loss['center_loss'] == 0.0:
+                    #     valid_mask = (batch['assignment'] >= 0)
+                    #     print(f"Center loss is zero. the number of voxels assignet to an object is: {valid_mask.sum()}")
+                    
                     loss['dim_loss'] = self.loss_fn.dimension_loss(dim, batch['assignment'], batch["label"])
                     del dim
                     
@@ -143,15 +148,15 @@ class Trainer:
 
                 del batch["label"], batch['assignment']
                 
-            print("Loss terms are explained: ...................")
-            print(f"Disparity loss is: {loss['disparity_loss']}")
-            print(f"Objectness loss is: {loss['obj_conf']}")
-            print(f"Classification loss is: {loss['obj_conf']}")
-            print(f"Center loss is: {loss['center_loss']}")
-            print(f"Dimension loss is: {loss['dim_loss']}")
-            print(f"yaw loss is: {loss['yaw_angle_loss']}")
-            print(f"Total loss is: {loss['total']}")
-            print("...........................................")
+            # print("Loss terms are explained: ...................")
+            # print(f"Disparity loss is: {loss['disparity_loss']}")
+            # print(f"Objectness loss is: {loss['obj_conf']}")
+            # print(f"Classification loss is: {loss['cls_loss']}")
+            # print(f"Center loss is: {loss['center_loss']}")
+            # print(f"Dimension loss is: {loss['dim_loss']}")
+            # print(f"yaw loss is: {loss['yaw_angle_loss']}")
+            # print(f"Total loss is: {loss['total']}")
+            # print("...........................................")
             # TODO: must be removed
             if torch.isnan(loss['total']) or loss['total'].item() == 0.0:
                 # Clear unused memory to reduce fragmentation (ChatGPT)
