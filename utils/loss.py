@@ -26,40 +26,48 @@ class loss3d(nn.Module):
         self.beta = self.cfg.loss.beta
         self.object_threshold = self.cfg.loss.object_threshold_loss
         self.zeta = self.cfg.loss.zeta
-       	
-
-    
+              
     def object_conf_loss(self, pred_obj_logits, assignments):
         """
-        If a voxel is inside the FOV (assignments != -3),
-        and not an ignored object (assignment != -2), loss is calculated!
-        
-        pred_obj_logits:    [B, 1, W, H, D]
-        assignments:        [B, W, H, D]
+        Focal BCE loss for objectness.
+        pred_obj_logits: [B, 1, W, H, D]
+        assignments:     [B, W, H, D]
         """
         loss = []
-                
-        for b in range(self.B):
+        for b in range(pred_obj_logits.shape[0]):
             mask = (assignments[b] >= -1)
+            if not mask.any():
+                continue
             
-            assert mask.any() == True
-
-            pred = pred_obj_logits[b, 0][mask]                # shape: [Number of interested objects voxels and background]
-            tgt = (assignments[b][mask] >= 0).float()         # 1 for object voxels and 0 for bg voxels
-        
-            # Focal BCE
+            pred = pred_obj_logits[b, 0][mask]
+            tgt = (assignments[b][mask] >= 0).float()
+    
+            # ✅ 1. Clamp logits to avoid inf in BCE
+            pred = torch.clamp(pred, min=-20.0, max=20.0)
+            
             bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
+            
+            bce = torch.clamp(bce, min=0.0, max=20.0)
+            
             pt = torch.exp(-bce)
+            pt = torch.clamp(pt, min=1e-6, max=1.0)
+            
             focal_loss = self.alpha * (1 - pt) ** self.gamma * bce
+            
+            if torch.isnan(focal_loss).any() or torch.isinf(focal_loss).any():
+                continue
+            
             loss.append(focal_loss.mean())
     
         if len(loss) == 0:
             return torch.tensor(0.0, device=pred_obj_logits.device, requires_grad=True)
         else:
             return torch.stack(loss).mean()
-
+        
     def classification_loss(self, pred_cls_logits, pred_obj_logits, assignments, gtl):
         """
+        Numerically stable classification loss with focal weighting and background KL regularization.
+    
         pred_cls_logits: [B, num_classes, W, H, D]
         pred_obj_logits: [B, 1, W, H, D]
         assignments:     [B, W, H, D]
@@ -67,44 +75,47 @@ class loss3d(nn.Module):
         """
         assert pred_cls_logits.shape[1] == self.num_c, "Class number mismatch in output and config"
         
-        loss = []
+        loss_terms = []
     
-        for b in range(self.B):
+        for b in range(pred_cls_logits.shape[0]):
+            # Masks
             obj_mask = (assignments[b] >= 0)
             bg_mask = (assignments[b] == -1)
-            
-            # Loss in valid voxels
+    
+            # --- OBJECT VOXELS ---
             if obj_mask.any():
-                
                 voxel_obj_indices = assignments[b][obj_mask].long()         # [N]
                 target_tensor = gtl[b][voxel_obj_indices, 7].long()         # [N]
                 
-                mask_debug = (target_tensor < 0)
-                assert mask_debug.any()  == False
-                
-                pred_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[obj_mask]  # [N, num_classes]
-                
+                assert (target_tensor >= 0).all(), "Target class < 0 detected"
+    
+                pred_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[obj_mask].clamp(-20, 20)  # [N, num_classes]
+    
+                # Standard CE with focal
                 ce = nn.functional.cross_entropy(pred_voxels, target_tensor, reduction='none', ignore_index=-100)
                 pt = torch.exp(-ce)
                 focal = self.alpha * (1 - pt) ** self.gamma * ce
-                loss.append(focal.mean())
+                loss_terms.append(focal.mean())
     
-            # loss if the voxel has no object but it has high objectness score
+            # --- BACKGROUND VOXELS KL REGULARIZATION ---
             if bg_mask.any():
-                high_obj_mask = torch.sigmoid(pred_obj_logits[b, 0]) > self.object_threshold
-                bad_mask = bg_mask & high_obj_mask
-                if bad_mask.any():
-                    pred_bg_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[bad_mask]
-                    pred_probs = nn.functional.softmax(pred_bg_voxels, dim=-1)
-                    target_probs = torch.full_like(pred_probs, 1.0 / self.num_c)
-                    kl_loss = nn.functional.kl_div(pred_probs.log(), target_probs, reduction='batchmean')
-                    loss.append(self.zeta * kl_loss)  # small weight for regularization
+                pred_bg_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[bg_mask].clamp(-20, 20)
+                pred_probs = nn.functional.softmax(pred_bg_voxels, dim=-1).clamp(min=1e-6)  # safe softmax
+                target_probs = torch.full_like(pred_probs, 1.0 / self.num_c).clamp(min=1e-6)
     
-        if not loss:
+                # Only penalize voxels with high objectness
+                high_obj_mask = torch.sigmoid(pred_obj_logits[b, 0][bg_mask]) > self.object_threshold
+                if high_obj_mask.any():
+                    pred_probs_high = pred_probs[high_obj_mask]
+                    target_probs_high = target_probs[high_obj_mask]
+                    kl_loss = nn.functional.kl_div(pred_probs_high.log(), target_probs_high, reduction='batchmean')
+                    loss_terms.append(self.zeta * kl_loss)
+    
+        if not loss_terms:
             return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True)
         else:
-            return torch.stack(loss).mean()
-        
+            return torch.stack(loss_terms).mean()
+            
     def center_loss(self, pred_offsets, assignments, gtl):
         """
         The loss for center is calculated for each voxel that is assigned to a valid object
@@ -113,39 +124,45 @@ class loss3d(nn.Module):
         assignments:    [B, W, H, D]
         gtl:            [B, 18, 12] --> gtl[b, :, 3:6] are (cx_off, ch_off, cz_off)
         """
-        loss = []
+        loss_terms = []
     
-        for b in range(self.B):
-            # Only compute if there are valid objects
+        for b in range(pred_offsets.shape[0]):
+            # Mask for valid object voxels
             valid_mask = (assignments[b] >= 0)
             if not valid_mask.any():
                 continue
     
-            i, j, k = torch.nonzero(valid_mask, as_tuple=True)  # (N,)
-            gt_indices = assignments[b][i, j, k].long()  # (N,)
+            i, j, k = torch.nonzero(valid_mask, as_tuple=True)
+            gt_indices = assignments[b][i, j, k].long()
+            
+            assert (gt_indices >= gtl.shape[1]).sum() == 0
     
-            # all voxel centers that are assigned to a gt index
-            voxel_centers = self.grid[i, j, k, :].to(pred_offsets.device)   # (N, 3)
-            # predicted offsets for valid voxels
-            pred_offsets_valid = pred_offsets[b][:, i, j, k].permute(1, 0)  # (N, 3)
-            # predicted centers
-            pred_obj_centers = voxel_centers.to(pred_offsets.device) + pred_offsets_valid  # (N, 3)
+            voxel_centers = self.grid[i, j, k, :].to(pred_offsets.device)    # (N, 3)
+            pred_offsets_valid = pred_offsets[b][:, i, j, k].permute(1, 0)   # (N, 3)
     
-            # ground truth absolute centers
+            # TODO: clamping is reasonable?        
+            pred_offsets_valid = pred_offsets_valid.clamp(-50, 50)
+    
+            pred_obj_centers = voxel_centers + pred_offsets_valid
             gt_centers = gtl[b, gt_indices, 3:6].to(pred_offsets.device)
     
-            # smooth L1 loss per voxel
+            # Filter out any NaNs/Infs in pred or gt
+            valid_values = (~torch.isnan(pred_obj_centers).any(dim=1)) & (~torch.isnan(gt_centers).any(dim=1))
+            if not valid_values.any():
+                continue
+    
+            pred_obj_centers = pred_obj_centers[valid_values]
+            gt_centers = gt_centers[valid_values]
+    
             l1 = nn.functional.smooth_l1_loss(pred_obj_centers, gt_centers, reduction='none', beta=self.beta)
-            l1 = l1.mean(dim=1)  # (N,)
+            l1 = l1.mean(dim=1)  # per voxel
+            loss_terms.append(l1.mean())
     
-            loss.append(l1.mean())
-    
-        if len(loss) == 0:
+        if not loss_terms:
             return torch.tensor(0.0, device=pred_offsets.device, requires_grad=True)
         else:
-            return torch.stack(loss).mean()
-            
-        
+            return torch.stack(loss_terms).mean()
+    
     def dimension_loss(self, pred_dims, assignments, gtl):
         """
         Calculates loss only for voxels closest to the object center
@@ -157,21 +174,23 @@ class loss3d(nn.Module):
         """
         loss = []
         
-        for b in range(self.B):
+        for b in range(pred_dims.shape[0]):
             valid_mask = (assignments[b] >= 0)
             
             if not valid_mask.any():
                 continue
     
-            unique_obj_indices = torch.unique(assignments[b][valid_mask].long())    # [unique indices --> U]        
+            unique_obj_indices = torch.unique(assignments[b][valid_mask].long())    # [unique indices --> U]
+            
+            assert (unique_obj_indices >= gtl.shape[1]).sum() == 0
     
             cv = gtl[b, unique_obj_indices, 8:11].long()  # [U, 3] --> voxel center closest to the object center
             i = cv[:, 0]
             j = cv[:, 1]
             k = cv[:, 2]
             
-            pred = pred_dims[b, :, i, j, k].permute(1, 0)       # [U, 3]
-            gt = gtl[b, unique_obj_indices, :3].to(pred.device)       # [U, 3]
+            pred = pred_dims[b, :, i, j, k].permute(1, 0).clamp(-40, 40)     # [U, 3]
+            gt = gtl[b, unique_obj_indices, :3].to(pred.device)              # [U, 3]
     
             # L1 loss per object
             l1 = nn.functional.l1_loss(pred, gt, reduction='none').mean(dim=1)  # (N_valid,)
@@ -198,15 +217,16 @@ class loss3d(nn.Module):
             if not valid_mask.any():
                 continue
             
-            unique_obj_indices = torch.unique(assignments[b][valid_mask].long())    # [unique indices --> U]        
+            unique_obj_indices = torch.unique(assignments[b][valid_mask].long())    # [unique indices --> U]   
+            assert (unique_obj_indices >= gtl.shape[1]).sum() == 0
     
             cv = gtl[b, unique_obj_indices, 8:11].long()  # [U, 3] --> voxel center closest to the object center
             i = cv[:, 0]
             j = cv[:, 1]
             k = cv[:, 2]
             
-            pred = pred_yaw[b, :, i, j, k].permute(1, 0)       # [U, ]
-            gt = gtl[b, unique_obj_indices, 6].to(pred.device)       # [U, ]
+            pred = pred_yaw[b, :, i, j, k].permute(1, 0).clamp(-40, 40)        # [U, ]
+            gt = gtl[b, unique_obj_indices, 6].to(pred.device)                 # [U, ]
     
             # Minimal angular difference in range [−π, π]
             diff = (pred - gt + math.pi) % (2 * math.pi) - math.pi
@@ -239,7 +259,7 @@ class loss3d(nn.Module):
         if not valid_mask.any():  # no valid pixels
             return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True)
         
-        pred_valid = disparity_pred[valid_mask]
+        pred_valid = disparity_pred[valid_mask].clamp(-400, 500)     
         gtl_valid  = disparity_gtl[valid_mask]
     
         return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta)
