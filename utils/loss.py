@@ -15,7 +15,7 @@ class loss3d(nn.Module):
         super(loss3d, self).__init__()
         self.cfg = cfg
         
-        self.grid = cfg.grid_forward[0]
+        self.grid = cfg.grid_forward[0].to(self.cfg.device[0])
         assert self.grid.shape[-1] == 3, f"Expected grid[..., 3] for (x,y,z), got shape {cfg.grid_forward[0].shape}"
         
         self.oob_mask_valid = cfg.oob_mask_valid[0] # inside FOV --> True
