@@ -220,27 +220,29 @@ class loss3d(nn.Module):
         else:
             return torch.stack(loss_terms).mean()
 
-
+    
     def disparity_loss(self, disparity_pred, disparity_gtl):
-        """        
-        disparity_pred:             [B, 1, image_h / 4, image_w / 4]
-        disparity_gtl               [B, image_h / 4, image_w / 4]
         """
-        #disparity_gtl = disparity_gtl.squeeze(1)
+        disparity_pred: [B, 1, H/4, W/4]
+        disparity_gtl:  [B, 1, H/4, W/4]
+        """
         self.B = len(disparity_pred)
         
-        if len(disparity_pred) != 0:
-            assert disparity_gtl.shape == disparity_pred.shape, f"gt is {disparity_gtl.shape} but pred is {disparity_pred.shape}"
-            
-            valid_depth_mask = (disparity_gtl > 0)
-            
-            pred_valid = disparity_pred[valid_depth_mask]
-            gtl_valid = disparity_gtl[valid_depth_mask]
-            
-            return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta)
-        else:
+        if disparity_pred.numel() == 0:
             return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True)
-            
+    
+        assert disparity_gtl.shape == disparity_pred.shape, \
+            f"gt is {disparity_gtl.shape} but pred is {disparity_pred.shape}"
+        
+        valid_mask = (disparity_gtl > 0)
+    
+        if not valid_mask.any():  # no valid pixels
+            return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True)
+        
+        pred_valid = disparity_pred[valid_mask]
+        gtl_valid  = disparity_gtl[valid_mask]
+    
+        return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta)
 
     def forward(self, prediction, disparity_pred,
                 gtl, assignments, disparity_gtl):

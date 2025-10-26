@@ -372,25 +372,32 @@ def convert_calibration(P, scale, crop, direction):
 
 def test_calib_transform(target_size = (288, 960),
                          calib_path = '/home/arash/SeaX3DIMG/dataset/training/calib/000057.txt',
-                         img_path='/home/arash/SeaX3DIMG/dataset/training/image_2/000057.png'):
+                         img_path2='/home/arash/SeaX3DIMG/dataset/training/image_2/000057.png',
+                         img_path3='/home/arash/SeaX3DIMG/dataset/training/image_3/000057.png'):
     
-    P = parse_calibration(calib_path)['P2']
+    P2 = parse_calibration(calib_path)['P2']
+    P3 = parse_calibration(calib_path)['P3']
     
     import cv2
-    img_l = cv2.imread(img_path, cv2.IMREAD_COLOR)
+    img_l = cv2.imread(img_path2, cv2.IMREAD_COLOR)
     img_l = cv2.cvtColor(img_l, cv2.COLOR_BGR2RGB)
     
-    print(f"Original P for shape: {np.shape(img_l)} is: ")
-    print(P)
+    img_r = cv2.imread(img_path3, cv2.IMREAD_COLOR)
+    img_r = cv2.cvtColor(img_r, cv2.COLOR_BGR2RGB)
     
-    final_img, scale, crop, direction = img_resize(img_l, target_size)
+    #print(f"Original P for shape: {np.shape(img_l)} is: ")
+    #print(P)
     
-    P_conv = convert_calibration(P, scale, crop, direction)
+    final_img2, scale2, crop2, direction2 = img_resize(img_l, target_size)
+    final_img3, scale3, crop3, direction3 = img_resize(img_r, target_size)
     
-    print(f"Converted P for shape: {target_size} is: ")
-    print(P_conv)
+    P2_conv = convert_calibration(P2, scale2, crop2, direction2)
+    P3_conv = convert_calibration(P3, scale3, crop3, direction3)
     
-    return P_conv
+    #print(f"Converted P for shape: {target_size} is: ")
+    #print(P_conv)
+    
+    return P2_conv, P3_conv
 
 
 def img_normalize(img, mean, std):
@@ -479,18 +486,35 @@ def create_depth_map(pcc, P2, im_shape=(375, 1242)):
 
     return torch.from_numpy(depth_map)
 
-def pcl_as_depth(pcl_path, cfg):
+def pcl_as_depth(pcl_path, cfg, debug = False):
     """Load LiDAR, project to image, convert to disparity, downsample safely"""
     pcl = np.fromfile(pcl_path, dtype=np.float32).reshape(-1, 4)[:, :3]  # [N,3]
     pcc = project_velo_to_rect(pcl, cfg)
     pcc_img = create_depth_map(pcc, cfg.camera.P_l[0].numpy(), cfg.model.in_size)
+    
+    if debug:
+        print(f"pcl max: {np.max(pcl)}, min: {np.min(pcl)}")
+        print(f"pcc max: {np.max(pcc)}, min: {np.min(pcc)}")
+        print(f"pcc_img max: {torch.max(pcc_img)}, min: {torch.min(pcc_img)}")
 
     # convert to disparity (focal * baseline / depth)
     focal = cfg.camera.focal[0]
     baseline = cfg.camera.base[0]
+    
+    if debug:
+        print(f"focal is: {focal}")
+        print(f"baseline is: {baseline}")
+    
     gt_disp = torch.zeros_like(pcc_img)
     valid_mask = pcc_img > 0
+    
+    if debug:
+        print(f"valid num is: {valid_mask.sum()}")
+    
     gt_disp[valid_mask] = (focal * baseline) / pcc_img[valid_mask]
+    
+    if debug:
+        print(f"gt_disp max: {torch.max(gt_disp)}, min: {torch.min(gt_disp)}")
 
     # Add batch and channel dims for interpolation
     gt_disp = gt_disp.unsqueeze(0).unsqueeze(0)
@@ -499,12 +523,21 @@ def pcl_as_depth(pcl_path, cfg):
     return pcl_down.squeeze(0)
     
 
-def get_focal_baseline(P2):
+def get_focal_baseline(P_l, P_r):
+    """
+    Compute focal length and baseline from left/right projection matrices.
 
-    f = P2[0, 0]
+    Args:
+        P_l: torch.Tensor [3x4] - left projection matrix
+        P_r: torch.Tensor [3x4] - right projection matrix
 
-    B = -P2[0, 3] / f
-
+    Returns:
+        f (float): focal length in pixels
+        B (float): baseline in meters (positive)
+    """
+    f = P_l[0, 0]
+    Tx = (P_r[0, 3] - P_l[0, 3]) / f
+    B = abs(Tx)
     return f, B
 
 def collate_fn(batch):

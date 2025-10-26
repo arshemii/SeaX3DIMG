@@ -143,6 +143,15 @@ class Trainer:
 
                 del batch["label"], batch['assignment']
                 
+            print("Loss terms are explained: ...................")
+            print(f"Disparity loss is: {loss['disparity_loss']}")
+            print(f"Objectness loss is: {loss['obj_conf']}")
+            print(f"Classification loss is: {loss['obj_conf']}")
+            print(f"Center loss is: {loss['center_loss']}")
+            print(f"Dimension loss is: {loss['dim_loss']}")
+            print(f"yaw loss is: {loss['yaw_angle_loss']}")
+            print(f"Total loss is: {loss['total']}")
+            print("...........................................")
             # TODO: must be removed
             if torch.isnan(loss['total']) or loss['total'].item() == 0.0:
                 # Clear unused memory to reduce fragmentation (ChatGPT)

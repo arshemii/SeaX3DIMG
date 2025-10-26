@@ -33,8 +33,7 @@ class kitti_sx3d(Dataset):
             raise NotImplementedError("Only test and train available!")
         
         # self._calibration_parse()
-
-        
+    
     def _calibration_parse(self):
         for instance in self.DF:
             # print(instance["calib_path"])
