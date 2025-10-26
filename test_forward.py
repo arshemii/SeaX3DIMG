@@ -270,7 +270,7 @@ def test_forward():
     dataset = kitti_sx3d(cfg)
     
     # model preparation
-    checkpoint_dir = cfg.model.sx3d.checkpoint_bev
+    checkpoint_dir = cfg.model.sx3d.checkpoint_3d
     latest_ckpt = max(
         glob.glob(os.path.join(checkpoint_dir, "checkpoint_epoch_*.pth")),
         key=lambda x: int(re.search(r"checkpoint_epoch_(\d+).pth", x).group(1)))

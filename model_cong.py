@@ -56,7 +56,7 @@ def config_generator():
     cfg.dev.t_max = cfg.dev.num_epoch - 10
     cfg.dev.eta_min = 1e-5
     cfg.dev.mode = None
-    cfg.dev.lr = 1e-4
+    cfg.dev.lr = 1.5e-4   # TODO: Turn it bacj to 1e-4
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
