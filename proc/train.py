@@ -202,6 +202,14 @@ class Trainer:
             json.dump(log, f, indent=4)
     
     def train(self):
+        
+        print("\n" + "="*60)
+        print("  ------------------------Training Started ------------------------  ")
+        print("="*60)
+        print(f" Grid resolution :          {self.cfg.grid_resolution}")
+        print(f" Input image size:          {self.cfg.model.in_size}")
+        print(f" Backbone       :           {self.cfg.model.back.name}")
+        print("="*60 + "\n")
         for epoch in range(self.start_epoch, self.start_epoch + self.num_epochs):
             start_time = time.time()
             
