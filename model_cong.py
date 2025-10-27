@@ -52,7 +52,7 @@ def config_generator():
     cfg.eval = CN()
     
     cfg.dev.scheduler = 'OClr'  # options: 'OClr', 'CAlr'
-    cfg.dev.num_epoch = 30
+    cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch - 4
     cfg.dev.eta_min = 1.5e-5
     cfg.dev.mode = None
