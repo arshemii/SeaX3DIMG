@@ -296,11 +296,12 @@ def test_forward():
         batch["left_img"] = batch["left_img"].to(cfg.device[0])
         batch["left_img_previous"] = batch["left_img_previous"].to(cfg.device[0])
         batch["right_img"] = batch["right_img"].to(cfg.device[0])
-        batch["label"] = batch["label"].to(cfg.device[0])
+        batch["right_img_previous"] = batch["right_img_previous"].to(cfg.device[0])
+        # batch["label"] = batch["label"].to(cfg.device[0])
                         
-        temporal_l = model.create_memory(batch["left_img_previous"])
-        outputs = model(batch["left_img"], batch["right_img"], temporal_l)[0]
-        outputs = outputs.detach().cpu()
+        temporal_l = model(batch["left_img_previous"], batch["right_img_previous"], None, True)
+        outputs = model(batch["left_img"], batch["right_img"], temporal_l, False)
+        # outputs = outputs.detach().cpu()
         
     results = output_PP(outputs, bev_grid, score_th=0.65, num_classes=4)
     img = tensor_to_image(batch["left_img"], cfg.data.mean[0], cfg.data.std[0])
@@ -419,3 +420,6 @@ def iou_bev(box1, box2, use_yaw=False):
         # TODO: yaw-aware IoU (requires polygon intersection)
         raise NotImplementedError("Rotated IoU not yet implemented")
 
+import matplotlib.pyplot as plt
+
+plt.imshow(

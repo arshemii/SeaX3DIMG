@@ -53,13 +53,15 @@ def config_generator():
     
     cfg.dev.scheduler = 'OClr'  # options: 'OClr', 'CAlr'
     cfg.dev.num_epoch = 30
-    cfg.dev.t_max = cfg.dev.num_epoch - 10
-    cfg.dev.eta_min = 1e-5
+    cfg.dev.t_max = cfg.dev.num_epoch - 4
+    cfg.dev.eta_min = 1.5e-5
     cfg.dev.mode = None
-    cfg.dev.lr = 1.5e-4   # TODO: Turn it bacj to 1e-4
+    cfg.dev.lr = 1e-4   # TODO: Turn it bacj to 1e-4
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
+    
+    # exp: t_max = ... -10, eta_min: 1e-5, lr: 1.5e4
     
     cfg.num_batch = 1
     cfg.num_worker = 0
