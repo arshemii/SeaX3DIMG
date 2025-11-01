@@ -11,15 +11,6 @@ import torch
 import os
 import torch.nn.functional as F
 
-def box_generator_2d(detection):
-    # order: xmin, ymin, xmax, ymax, yaw
-    # written in this way fro more readability
-    return np.array([detection[4],
-                    detection[5],
-                    detection[6],
-                    detection[7],
-                    detection[14]])
-
 
 def box_generator_3d(detection):
     # order: h, w, l, cx, cy, cz, yaw
@@ -27,12 +18,6 @@ def box_generator_3d(detection):
     return np.array([detection[8], detection[9], detection[10],
                     detection[11], detection[12], detection[13],
                     detection[14]])
-
-def box_generator_3d_to_bev(bbox_3d):
-    # order: w, l, cx, cz, yaw
-    return np.array([bbox_3d[1], bbox_3d[2],
-                     bbox_3d[3], bbox_3d[5],
-                     bbox_3d[6]])
 
 def parse_id_file(set_path, data_dir):
     result = []
@@ -134,14 +119,11 @@ def parse_label(label_path, cfg):
             
             one_det_in_instance = {
                 'category': torch.tensor([category]),
-                # 'bbox2d': torch.from_numpy(box_generator_2d(det)),
                 'bbox3d': torch.from_numpy(box_generator_3d(det)),
                 'truncation': det[1],
                 'occlusion': int(det[2]),
                 'angle_observation': det[3],
                 'score': score}
-            #bbox_bev = box_generator_3d_to_bev(box_generator_3d(det))
-            #one_det_in_instance['bbox_bev'] = torch.from_numpy(bbox_bev)
             
             if cfg.short_grid_range:
                 x = one_det_in_instance['bbox3d'][3]
@@ -161,45 +143,6 @@ def parse_label(label_path, cfg):
     return all_det_in_instance
 
 
-def aggregate_assignment(assignments: torch.Tensor) -> torch.Tensor:
-    """
-    Collapse [W, H, D] voxel assignments into [W, D] BEV map.
-
-    Rules:
-      1. If any object index (>=0) exists → pick one randomly.
-      2. If mix of object and ignored (-2) → pick from object ones.
-      3. If only ignored (-2) → pick one randomly from ignored.
-      4. Else (all -1) → -1 background.
-      5. Index -3 has priority to all. even to background
-    """
-    W, H, D = assignments.shape
-    bev = torch.full((W, D), -1, dtype=assignments.dtype, device=assignments.device)
-
-    ass = assignments
-
-    obj_mask = ass >= 0
-    ign_mask = ass == -2
-    blind_mask = ass == -3
-
-    has_obj = obj_mask.any(dim=1)
-    has_ign = ign_mask.any(dim=1)
-        
-    xs, zs = torch.nonzero(has_obj | has_ign, as_tuple=True)
-    for x, z in zip(xs.tolist(), zs.tolist()):
-        pillar = ass[x, :, z]
-        objs = pillar[pillar >= 0]
-        if len(objs) > 0:
-            idx = torch.randint(0, len(objs), (1,), device=ass.device)
-            bev[x, z] = objs[idx]
-        else:
-            igs = pillar[pillar == -2]
-            if len(igs) > 0:
-                idx = torch.randint(0, len(igs), (1,), device=ass.device)
-                bev[x, z] = igs[idx]
-    
-    has_blind = blind_mask.any(dim=1)
-    bev[has_blind] = -3
-    return bev
 
 def voxel_assigner(label, cfg, debug = False):
     """
@@ -295,7 +238,6 @@ def voxel_assigner(label, cfg, debug = False):
             center_voxels[gt_idx, :] = torch.tensor([i, j, k])
         assignments[~cfg.oob_mask_valid[0]] = -3
         
-    # assignment_bev = aggregate_assignment(assignments)
         
     return assignments, center_voxels, valid_obj_mask
     
@@ -546,6 +488,7 @@ def collate_fn(batch):
     images_l_p = torch.stack([item['left_img_previous'] for item in batch])
     images_r = torch.stack([item['right_img'] for item in batch])
     images_r_p = torch.stack([item['right_img_previous'] for item in batch])
+    image_id = [item['id'] for item in batch]
     # calib_left = torch.stack([item['calib'] for item in batch], dim=0)  # a 12-value each row of P
     
     batch_dict = {
@@ -553,6 +496,7 @@ def collate_fn(batch):
         "left_img_previous": images_l_p.to(dtype=torch.float32),
         "right_img": images_r.to(dtype=torch.float32),
         "right_img_previous": images_r_p.to(dtype=torch.float32),
+        "id": image_id
         # "calib": calib_left.to(dtype=torch.float32)
     }
 

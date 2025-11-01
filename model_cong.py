@@ -50,6 +50,11 @@ def config_generator():
     cfg.dev = CN()
     cfg.loss = CN()
     cfg.eval = CN()
+    cfg.test = CN()
+    
+    
+    cfg.test.score_th = 0.35
+    cfg.test.local_maxima_kernel = 5
     
     cfg.dev.scheduler = 'OClr'  # options: 'OClr', 'CAlr'
     cfg.dev.num_epoch = 45
