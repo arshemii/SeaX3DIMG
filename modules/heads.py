@@ -5,7 +5,7 @@ Note: all the inputs to these modules are in shape:
     (1, 259, 100, 30, 70)
     where we try to keep the spatial dimension the same since they are position clues
 """
-import torch
+#import torch
 import torch.nn as nn
 import torch.nn.functional as F
 #import math
@@ -59,9 +59,9 @@ class head_3d_detection(nn.Module):
         
         self.head_list = [nn.Conv3d(self.inplanes, 1, kernel_size=1),
                           nn.Conv3d(self.inplanes, self.num_classes, kernel_size=1),
-                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), torch.tanh()),
-                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), F.softplus()),
-                          nn.Sequential(nn.Conv3d(self.inplanes, 1, kernel_size=1), torch.tanh())]
+                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.tanh()),
+                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.softplus()),
+                          nn.Sequential(nn.Conv3d(self.inplanes, 1, kernel_size=1), nn.tanh())]
         
 
     def forward(self, x, mode = 'eval', lw = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]):
