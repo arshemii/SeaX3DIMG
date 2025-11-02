@@ -216,7 +216,7 @@ def config_generator():
 
 
     cfg.loss.weight_debug = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    cfg.loss.weight = [1.0, 1.0, 0.85, 0.85, 0.35]
+    cfg.loss.weight = [8.0, 4.0, 6.0, 1.5, 1.0]
     cfg.loss.aux_loss = True
     if cfg.loss.aux_loss:
         cfg.loss.weight.append(0.2)
@@ -227,6 +227,7 @@ def config_generator():
     cfg.loss.object_threshold_loss = 0.5
     cfg.loss.zeta = 0.2    # to penalize background voxels if objectness is high
     cfg.loss.optimized = True
+    cfg.loss.debug = True
     
 
     cfg.eval.save_dir = './eval_dir/'

@@ -41,7 +41,7 @@ class Trainer:
         self.scheduler = scheduler
         
         if self.cfg.loss.optimized:
-            self.loss_weights = self.cfg.loss.weight_debug
+            self.loss_weights = self.cfg.loss.weight
 
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
@@ -155,12 +155,13 @@ class Trainer:
                 if self.cfg.loss.aux_loss:
                     loss['total'] += self.loss_weights[5] * loss['disparity_loss']
                     
-                for key in loss.keys():
-                    print(f"The {key} value is: {loss[key]}")
-                    
-                if batch_idx % 20 == 0:
-                    for k in self.missed_dict.keys():
-                        print(f"Instables in {k} are: {self.missed_dict[k]}")
+                
+                if self.cfg.loss.debug:
+                    for key in loss.keys():
+                        print(f"The {key} value is: {loss[key]}")
+                    if batch_idx % 20 == 0:
+                        for k in self.missed_dict.keys():
+                            print(f"Instables in {k} are: {self.missed_dict[k]}")
 
                 del batch["label"], batch['assignment']
                 

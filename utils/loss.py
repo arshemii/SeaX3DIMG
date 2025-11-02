@@ -264,7 +264,7 @@ class loss3d(nn.Module):
             j = cv[:, 1]
             k = cv[:, 2]
             
-            pred = pred_yaw[b, :, i, j, k].permute(1, 0)                       # [U, ]
+            pred = pred_yaw[b, :, i, j, k].view(-1)                            # [U]
             gt = gtl[b, unique_obj_indices, 6].to(pred.device)                 # [U, ]
     
             # Sin-cos regression
