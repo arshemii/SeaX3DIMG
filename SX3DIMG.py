@@ -190,12 +190,13 @@ class SX3DIMG(nn.Module):
         del full_voxel_flat
         return full_voxel
         
-    def forward(self, img_l, img_r, memory, create_memory = False):
+    def forward(self, img_l, img_r, memory, create_memory = False, mode = 'eval'):
         """
         img_l and img_r:    Shape (B, 3, 288, 960) --> h=288, w=960
         mem_left:           shape (B, 3, X, Y, Z)
 
-        """            
+        """    
+                
         # Feature extraction from each image
         left_f, left_f_inter = self.backbone(img_l)     # shape for outputs: (1, 48, h/4, h/4)
         _, right_f_inter = self.backbone(img_r)         # shape for outputs: (1, 48, h/4, h/4)
@@ -232,7 +233,7 @@ class SX3DIMG(nn.Module):
         else:
             assert memory == None and create_memory == False
             voxel = self.conv_agg(voxel)  # reduce channels
-            out = self.head(voxel) # 5 tensors
+            out = self.head(voxel, mode) # 5 tensors
             if self.cfg.loss.aux_loss:
                 return out, disp_upsampled
             else:

@@ -8,7 +8,7 @@ Note: all the inputs to these modules are in shape:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
+#import math
 
 
 def convbn_3d(in_planes, out_planes, kernel_size, stride, 
@@ -18,7 +18,7 @@ def convbn_3d(in_planes, out_planes, kernel_size, stride,
                                     nn.BatchNorm3d(out_planes) if not gn else nn.GroupNorm(groups, out_planes))
 
 class head_3d_detection(nn.Module):
-    def __init__(self, cfg, gn=False, debug = False):
+    def __init__(self, cfg, gn=True, debug = False):
         super(head_3d_detection, self).__init__()
         
         
@@ -52,13 +52,19 @@ class head_3d_detection(nn.Module):
                                                       padding=1, output_padding=1, stride=2,bias=False),
                                                        nn.BatchNorm3d(self.inplanes) if not gn else nn.GroupNorm(32, self.inplanes))
 
-        self.obj_head = nn.Conv3d(self.inplanes, 1, kernel_size=1)         # objectness heatmap
-        self.dim_head = nn.Conv3d(self.inplanes, 3, kernel_size=1)         # bbox dimensions w,h,d
-        self.offset_head = nn.Conv3d(self.inplanes, 3, kernel_size=1)      # center offsets dx,dy,dz
-        self.class_head = nn.Conv3d(self.inplanes, self.num_classes, kernel_size=1) # class probabilities
-        self.yaw_head = nn.Conv3d(self.inplanes, 1, kernel_size=1)         # yaw
+        # order of head:
+            # obj, cls, cntr, dim, yaw
+        
+        self.head_order = ['obj', 'clss', 'cntr', 'dim', 'yaw']
+        
+        self.head_list = [nn.Conv3d(self.inplanes, 1, kernel_size=1),
+                          nn.Conv3d(self.inplanes, self.num_classes, kernel_size=1),
+                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), torch.tanh()),
+                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), F.softplus()),
+                          nn.Sequential(nn.Conv3d(self.inplanes, 1, kernel_size=1), torch.tanh())]
+        
 
-    def forward(self, x):
+    def forward(self, x, mode = 'eval', lw = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]):
 
         out = self.conv1(x)  # in:1/4 out:1/8
         pre = self.conv2(out)  # in:1/8 out:1/8
@@ -82,20 +88,24 @@ class head_3d_detection(nn.Module):
         post = F.relu(self.conv5(out) + pre, inplace=True)
 
         out = self.conv6(post)  # in:1/8 out:1/4
-
-        obj = self.obj_head(out)                             # [B,1,D,H,W]
         
-        dims = self.dim_head(out)                            # [B,3,D,H,W]
-        dims = F.softplus(dims)
-        
-        offset = self.offset_head(out)                       # [B,3,D,H,W]
-        offset = torch.tanh(offset)
-        
-        classes = self.class_head(out)                       # [B,K,D,H,W]
-        
-        yaw = self.yaw_head(out)                             # [B,1,D,H,W]
-        yaw = math.pi * torch.tanh(yaw) 
-        
-        return obj, dims, offset, classes, yaw
+        if mode == 'train':
+            outputs = {}
+            lw = lw[ : -1]
+            for idx, w in enumerate(lw):
+                key = self.head_order[idx]
+                if w == 0:
+                    outputs[key] = None
+                else:
+                    outputs[key] = self.head_list[idx](out)
+            return outputs['obj'], outputs['dim'], outputs['cntr'], outputs['clss'], outputs['yaw']
+                    
+        else:
+            obj = self.head_list[0](out)
+            classes = self.head_list[1](out)
+            offset = self.head_list[2](out)
+            dims = self.head_list[3](out)
+            yaw = self.head_list[4](out)
+            return obj, dims, offset, classes, yaw
 
  

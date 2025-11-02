@@ -106,36 +106,20 @@ class Trainer:
                         
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
-            if self.cfg.model.sx3d.memory:
-                batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
-                batch["right_img_previous"] = batch["right_img_previous"].to(self.device)
-            
+          
             self.optimizer.zero_grad()
             
-            #create temporal memory for both left and right image from t - dt
             with autocast(device_type='cuda'):
                 # model forward
-                if self.cfg.model.sx3d.memory:
-                    temporal = self.model(batch["left_img_previous"], batch["right_img_previous"],
-                                         None, create_memory = True)
-                    del batch["left_img_previous"], batch["right_img_previous"]
-                    if self.cfg.loss.aux_loss:
-                        outputs, disp, _ = self.model(batch["left_img"], batch["right_img"],
-                                                      temporal, create_memory = False)
-                    else:
-                        outputs, _ = self.model(batch["left_img"], batch["right_img"],
-                                                temporal, create_memory = False)
-                        disp = None
-                        del temporal
-                        
+                if self.cfg.loss.aux_loss:
+                    outputs, disp = self.model(batch["left_img"], batch["right_img"],
+                                               None, create_memory = False, mode = self.cfg.dev.mode,
+                                               lw = self.loss_weights)
                 else:
-                    if self.cfg.loss.aux_loss:
-                        outputs, disp = self.model(batch["left_img"], batch["right_img"],
-                                                   None, create_memory = False)
-                    else:
-                        outputs = self.model(batch["left_img"], batch["right_img"],
-                                             None, create_memory = False)
-                        disp = None
+                    outputs = self.model(batch["left_img"], batch["right_img"],
+                                         None, create_memory = False, mode = self.cfg.dev.mode,
+                                         lw = self.loss_weights)
+                    disp = None
                 
                 # model predictions
                 obj = outputs[0]
@@ -155,28 +139,45 @@ class Trainer:
                 # Loss calculation
                 loss = {}
                 if self.cfg.loss.aux_loss:
-                    loss['disparity_loss'], cnt_disp = self.loss_fn.disparity_loss(disp, batch["disparity"])
-                    self.missed_dict['cnt_disp'] += cnt_disp
-                    del disp, batch["disparity"]
+                    if disp != None:
+                        loss['disparity_loss'], cnt_disp = self.loss_fn.disparity_loss(disp, batch["disparity"])
+                        self.missed_dict['cnt_disp'] += cnt_disp
+                        del disp, batch["disparity"]
+                    else:
+                        loss['disparity_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
                     
-                loss['obj_conf'], cnt_obj = self.loss_fn.object_conf_loss(obj, batch['assignment'])
-                self.missed_dict['cnt_obj'] += cnt_obj
-                loss['cls_loss'], cnt_cls = self.loss_fn.classification_loss(cls_logits, obj, batch['assignment'], batch["label"])
-                self.missed_dict['cnt_cls'] += cnt_cls
-                del cls_logits, obj
+                if obj != None:
+                    loss['obj_conf'], cnt_obj = self.loss_fn.object_conf_loss(obj, batch['assignment'])
+                    self.missed_dict['cnt_obj'] += cnt_obj
+                    if cls_logits != None:
+                        loss['cls_loss'], cnt_cls = self.loss_fn.classification_loss(cls_logits, obj, batch['assignment'], batch["label"])
+                        self.missed_dict['cnt_cls'] += cnt_cls
+                        del cls_logits, obj
+                    else:
+                        loss['cls_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
+                        del obj
+                else:
+                    loss['obj_conf'] = torch.tensor(0.0, device=self.device, requires_grad=True)
                 
-                loss['center_loss'], cnt_center = self.loss_fn.center_loss(centerx, batch['assignment'], batch["label"])
-                self.missed_dict['cnt_cntr'] += cnt_center 
-                del centerx
+                if centerx != None:
+                    loss['center_loss'], cnt_center = self.loss_fn.center_loss(centerx, batch['assignment'], batch["label"])
+                    self.missed_dict['cnt_cntr'] += cnt_center 
+                    del centerx
                 
-                loss['dim_loss'], cnt_dim = self.loss_fn.dimension_loss(dim, batch['assignment'], batch["label"])
-                self.missed_dict['cnt_dim'] += cnt_dim
-                del dim
+                if dim != None:
+                    loss['dim_loss'], cnt_dim = self.loss_fn.dimension_loss(dim, batch['assignment'], batch["label"])
+                    self.missed_dict['cnt_dim'] += cnt_dim
+                    del dim
+                else:
+                    loss['dim_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
                 
                 # yaw angle loss
-                loss['yaw_angle_loss'], cnt_yaw = self.loss_fn.yaw_loss(yaw, batch['assignment'], batch["label"])
-                self.missed_dict['cnt_yaw'] += cnt_yaw
-                del yaw
+                if yaw != None:
+                    loss['yaw_angle_loss'], cnt_yaw = self.loss_fn.yaw_loss(yaw, batch['assignment'], batch["label"])
+                    self.missed_dict['cnt_yaw'] += cnt_yaw
+                    del yaw
+                else:
+                    loss['yaw_angle_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
                 
                 loss['total'] = self.loss_weights[0] * loss['obj_conf'] + \
                     self.loss_weights[1] * loss['cls_loss'] + \
