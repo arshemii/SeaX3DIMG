@@ -67,6 +67,7 @@ class head_3d_detection(nn.Module):
     def forward(self, x, mode = 'eval', lw = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]):
         
         with torch.cuda.amp.autocast(enabled=False):
+            x = x.float()
             out = self.conv1(x)  # in:1/4 out:1/8
             pre = self.conv2(out)  # in:1/8 out:1/8
             
@@ -104,7 +105,6 @@ class head_3d_detection(nn.Module):
                         outputs[key] = None
                     else:
                         outputs[key] = self.head_list[idx](out)
-                return outputs['obj'], outputs['dim'], outputs['cntr'], outputs['clss'], outputs['yaw']
                         
             else:
                 obj = self.head_list[0](out)
@@ -112,6 +112,11 @@ class head_3d_detection(nn.Module):
                 offset = self.head_list[2](out)
                 dims = self.head_list[3](out)
                 yaw = self.head_list[4](out)
-                return obj, dims, offset, classes, yaw
+                
+            
+        if mode == 'train':
+            return outputs['obj'], outputs['dim'], outputs['cntr'], outputs['clss'], outputs['yaw']
+        else:
+            return obj, dims, offset, classes, yaw
 
  
