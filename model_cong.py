@@ -215,9 +215,14 @@ def config_generator():
                             "FINAL_CONV_KERNEL": 1}]
 
     # order of weight:
-        # obj, cls, cntr, dim, yaw, disp
-    cfg.loss.weight_debug = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    cfg.loss.weight = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]
+        # obj, cls, cntr, dim, yaw, disp    
+    cfg.loss.stage_epochs = [8, 12, 15, 18, 22]
+    cfg.loss.w_schedule = [[10.0, 0.0, 0.0, 0.0, 0.0, 0.15],
+                           [10.0, 3.0, 0.0, 0.0, 0.0, 0.10],
+                           [10.0, 6.0, 0.0, 0.0, 0.0, 0.10],
+                           [10.0, 6.0, 3.0, 1.0, 1.0, 0.10],
+                           [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]]
+    
     #cfg.loss.weight = [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     cfg.loss.aux_loss = True
     if cfg.loss.aux_loss:

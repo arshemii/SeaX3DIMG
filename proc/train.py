@@ -26,6 +26,10 @@ def load_checkpoint(filename, model, optimizer=None):
         optimizer.load_state_dict(checkpoint['optimizer_state'])
     return checkpoint.get('epoch', 0)
 
+def interpolate_weights(w1, w2, alpha):
+    """Linearly interpolate between two lists of weights."""
+    return [(1 - alpha) * a + alpha * b for a, b in zip(w1, w2)]
+
 class Trainer:
     def __init__(self, cfg, model, dataset, collate_fn,
                  optimizer, scheduler, loss_fn, resume_checkpoint=None):
@@ -39,14 +43,12 @@ class Trainer:
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.scheduler = scheduler
-        
-        if self.cfg.loss.optimized:
-            self.loss_weights = self.cfg.loss.weight
 
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
         
         self.missed_dict = {k: 0 for k in ['cnt_disp', 'cnt_obj', 'cnt_cls', 'cnt_cntr', 'cnt_dim', 'cnt_yaw']}
+        self.stage_epochs = self.cfg.loss.stage_epochs  # boundaries for transitions (example)
         
         self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_3d
         self.log_dir = self.cfg.log_dir
@@ -65,9 +67,38 @@ class Trainer:
     def _print_train_stats(self, epoch, avg_loss, train_time):
         print(f"Training epoch {epoch} with loss {avg_loss:.2f} in {train_time:.2f}")
     
+    def update_loss_weights(self, epoch):
+        """
+        Smoothly update self.loss_weights based on epoch using linear interpolation
+        between consecutive weight schedules.
+        """
+        w = self.cfg.loss.w_schedule  # list of lists
+        
+    
+        if epoch <= self.stage_epochs[0]:
+            self.loss_weights = w[0]
+        elif epoch < self.stage_epochs[1]:
+            alpha = (epoch - self.stage_epochs[0]) / (self.stage_epochs[1] - self.stage_epochs[0])
+            self.loss_weights = interpolate_weights(w[0], w[1], alpha)
+        elif epoch < self.stage_epochs[2]:
+            alpha = (epoch - self.stage_epochs[1]) / (self.stage_epochs[2] - self.stage_epochs[1])
+            self.loss_weights = interpolate_weights(w[1], w[2], alpha)
+        elif epoch < self.stage_epochs[3]:
+            alpha = (epoch - self.stage_epochs[2]) / (self.stage_epochs[3] - self.stage_epochs[2])
+            self.loss_weights = interpolate_weights(w[2], w[3], alpha)
+        elif epoch < self.stage_epochs[4]:
+            alpha = (epoch - self.stage_epochs[3]) / (self.stage_epochs[4] - self.stage_epochs[3])
+            self.loss_weights = interpolate_weights(w[3], w[4], alpha)
+        else:
+            self.loss_weights = w[4]
+    
     def train_epoch(self, epoch):
         running_loss = 0.0
         avg_loss = 0.0
+        
+        self.update_loss_weights(epoch)
+        
+        print(f"Epoch {epoch} using loss weights: {self.loss_weights}")
         
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         for batch_idx, batch in pbar:
