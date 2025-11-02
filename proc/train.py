@@ -98,6 +98,7 @@ class Trainer:
         
         self.update_loss_weights(epoch)
         
+        print("---------------------------------------------------------------")
         print(f"Epoch {epoch} using loss weights: {self.loss_weights}")
         
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
