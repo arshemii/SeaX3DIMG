@@ -217,10 +217,10 @@ def config_generator():
     # order of weight:
         # obj, cls, cntr, dim, yaw, disp
     cfg.loss.weight_debug = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    cfg.loss.weight = [10.0, 6.0, 7.0, 1.8, 2.0]
+    #cfg.loss.weight = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]
+    cfg.loss.weight = [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     cfg.loss.aux_loss = True
     if cfg.loss.aux_loss:
-        cfg.loss.weight.append(0.1)
         cfg.model.return_disp = True
     cfg.loss.alpha = 0.55  # TODO: if model predicts a lot of objects, increase it 
     cfg.loss.gamma = 2.0
