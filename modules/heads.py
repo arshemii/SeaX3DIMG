@@ -57,11 +57,13 @@ class head_3d_detection(nn.Module):
         
         self.head_order = ['obj', 'clss', 'cntr', 'dim', 'yaw']
         
-        self.head_list = [nn.Conv3d(self.inplanes, 1, kernel_size=1),
-                          nn.Conv3d(self.inplanes, self.num_classes, kernel_size=1),
-                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.Tanh()),
-                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.Softplus()),
-                          nn.Sequential(nn.Conv3d(self.inplanes, 1, kernel_size=1), nn.Tanh())]
+        self.head_list = nn.ModuleList([
+                        nn.Conv3d(self.inplanes, 1, kernel_size=1),
+                        nn.Conv3d(self.inplanes, self.num_classes, kernel_size=1),
+                        nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.Tanh()),
+                        nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.Softplus()),
+                        nn.Sequential(nn.Conv3d(self.inplanes, 1, kernel_size=1), nn.Tanh())
+                    ])
         
 
     def forward(self, x, mode = 'eval', lw = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]):
@@ -70,31 +72,17 @@ class head_3d_detection(nn.Module):
             x = x.float()
             out = self.conv1(x)  # in:1/4 out:1/8
             pre = self.conv2(out)  # in:1/8 out:1/8
-            
-            if self.debug:
-                print(f"first out shape is: {out.shape}")
-                print(f"first pre shape is: {pre.shape}")
-            
             pre = F.relu(pre, inplace=True)
-    
             out = self.conv3(pre)  # in:1/8 out:1/16
-            if self.debug:
-                print(f"second out shape is: {out.shape}")
             out = self.conv4(out)  # in:1/16 out:1/16
-            
-            if self.debug:
-                print(f"third out shape is: {out.shape}")
-                print(f"conv5(out) shape: {self.conv5(out).shape}")
-    
-             
             post = F.relu(self.conv5(out) + pre, inplace=True)
-    
             out = self.conv6(post)  # in:1/8 out:1/4
             
             print(out.dtype)
             for i, h in enumerate(self.head_list):
                 for n, p in h.named_parameters():
                     print(f"Head {i}, {n} dtype: {p.dtype}")
+                    print(f"Head {i}, {n} device: {p.device}")
             
             if mode == 'train':
                 outputs = {}
