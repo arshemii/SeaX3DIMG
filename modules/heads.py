@@ -59,9 +59,9 @@ class head_3d_detection(nn.Module):
         
         self.head_list = [nn.Conv3d(self.inplanes, 1, kernel_size=1),
                           nn.Conv3d(self.inplanes, self.num_classes, kernel_size=1),
-                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.tanh()),
-                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.softplus()),
-                          nn.Sequential(nn.Conv3d(self.inplanes, 1, kernel_size=1), nn.tanh())]
+                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.Tanh()),
+                          nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.Softplus()),
+                          nn.Sequential(nn.Conv3d(self.inplanes, 1, kernel_size=1), nn.Tanh())]
         
 
     def forward(self, x, mode = 'eval', lw = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]):
