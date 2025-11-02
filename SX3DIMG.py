@@ -42,9 +42,14 @@ class SX3DIMG(nn.Module):
                                         nn.BatchNorm3d(3),
                                         nn.ReLU(inplace=True))
         
-        self.conv_agg = nn.Sequential(nn.Conv3d(131, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
-                                        nn.BatchNorm3d(self.cfg.model.head.inplanes),
-                                        nn.ReLU(inplace=True))
+        if self.cfg.model.sx3d.memory:
+            self.conv_agg = nn.Sequential(nn.Conv3d(131, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
+                                            nn.BatchNorm3d(self.cfg.model.head.inplanes),
+                                            nn.ReLU(inplace=True))
+        else:
+            self.conv_agg = nn.Sequential(nn.Conv3d(128, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
+                                            nn.BatchNorm3d(self.cfg.model.head.inplanes),
+                                            nn.ReLU(inplace=True))
 
 
     def feature_net(self):
@@ -200,6 +205,8 @@ class SX3DIMG(nn.Module):
         matched_tensor, disp_upsampled, conf_upsampled = self.matching_module(left_f_inter,
                                                                               right_f_inter,
                                                                               left_f)
+        disp_upsampled = F.softplus(disp_upsampled)
+        
         if not self.cfg.model.conf_voxel:
             conf_upsampled = None    
         voxel = self.voxelizer(matched_tensor, conf_upsampled) # (B, 128, X, Y, Z)
@@ -207,21 +214,30 @@ class SX3DIMG(nn.Module):
         del matched_tensor, left_f_inter, right_f_inter
         
         # TODO: should be done?
-        forward_mem = self.create_memory_forward(voxel).detach()
-
-        if create_memory:
-            return forward_mem
+        if self.cfg.model.sx3d.memory:
+            assert memory != None or create_memory != False
+            forward_mem = self.create_memory_forward(voxel).detach()
+            if create_memory:
+                return forward_mem
+            else:
+                assert memory is not None
+                voxel = torch.cat([voxel, memory], dim=1)  # chanels --> 128 + 3
+                voxel = self.conv_agg(voxel)  # reduce channels
+                # print(voxel.shape)
+                out = self.head(voxel) # 5 tensors
+                if self.cfg.loss.aux_loss:
+                    return out, disp_upsampled, forward_mem
+                else:
+                    return out, forward_mem
         else:
-            assert memory is not None
-            voxel = torch.cat([voxel, memory], dim=1)  # chanels --> 128 + 3
+            assert memory == None and create_memory == False
             voxel = self.conv_agg(voxel)  # reduce channels
-            # print(voxel.shape)
             out = self.head(voxel) # 5 tensors
             if self.cfg.loss.aux_loss:
-                return out, disp_upsampled, forward_mem
+                return out, disp_upsampled
             else:
-                return out, forward_mem
-        
+                return out
+  
 def load_weights_from_checkpoint(model, checkpoint_path):
     if checkpoint_path is not None:
         ckpt = torch.load(checkpoint_path, map_location='cpu')

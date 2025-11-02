@@ -5,10 +5,10 @@ Note: all the inputs to these modules are in shape:
     (1, 259, 100, 30, 70)
     where we try to keep the spatial dimension the same since they are position clues
 """
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 
 
 def convbn_3d(in_planes, out_planes, kernel_size, stride, 
@@ -84,10 +84,17 @@ class head_3d_detection(nn.Module):
         out = self.conv6(post)  # in:1/8 out:1/4
 
         obj = self.obj_head(out)                             # [B,1,D,H,W]
+        
         dims = self.dim_head(out)                            # [B,3,D,H,W]
+        dims = F.softplus(dims)
+        
         offset = self.offset_head(out)                       # [B,3,D,H,W]
+        offset = torch.tanh(offset)
+        
         classes = self.class_head(out)                       # [B,K,D,H,W]
+        
         yaw = self.yaw_head(out)                             # [B,1,D,H,W]
+        yaw = math.pi * torch.tanh(yaw) 
         
         return obj, dims, offset, classes, yaw
 

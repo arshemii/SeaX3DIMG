@@ -59,7 +59,7 @@ def config_generator():
     cfg.dev.scheduler = 'OClr'  # options: 'OClr', 'CAlr'
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch - 4
-    cfg.dev.eta_min = 1.5e-5
+    cfg.dev.eta_min = 1e-5
     cfg.dev.mode = None
     cfg.dev.lr = 1e-4   # TODO: Turn it bacj to 1e-4
     cfg.dev.weight_decay = 1e-4
@@ -98,6 +98,7 @@ def config_generator():
     cfg.model.max_disp = 16
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
+    cfg.model.sx3d.memory = False
     cfg.model.sx3d.use_checkpoint = False
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
@@ -105,6 +106,8 @@ def config_generator():
     cfg.data.path = './dataset/sequential/'
     cfg.data.filter = [{"trunc": 0.8,
                         "occl": [0, 1, 2]}]
+    
+    cfg.data.object_AABB_scale = 1.2 # TODO: if model predicts a lot of objects, increase it 
     
     cfg.camera.P_l = [torch.tensor([[5.5771e+02, 0.0000e+00, 4.7116e+02, 3.4672e-02],
                                              [0.0000e+00, 5.5771e+02, 1.3361e+02, 1.6725e-04],
@@ -212,16 +215,17 @@ def config_generator():
                             "FINAL_CONV_KERNEL": 1}]
 
 
-    cfg.loss.weight = [1.0, 1.0, 0.75, 0.65, 0.35]
+    cfg.loss.weight_debug = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+    cfg.loss.weight = [1.0, 1.0, 0.85, 0.85, 0.35]
     cfg.loss.aux_loss = True
     if cfg.loss.aux_loss:
-        cfg.loss.weight.append(0.3)
+        cfg.loss.weight.append(0.2)
         cfg.model.return_disp = True
-    cfg.loss.alpha = 0.25
+    cfg.loss.alpha = 0.55  # TODO: if model predicts a lot of objects, increase it 
     cfg.loss.gamma = 2.0
-    cfg.loss.beta = 1.0
+    cfg.loss.beta = 1.4
     cfg.loss.object_threshold_loss = 0.5
-    cfg.loss.zeta = 0.5    # to penalize background voxels if objectness is high
+    cfg.loss.zeta = 0.2    # to penalize background voxels if objectness is high
     cfg.loss.optimized = True
     
 

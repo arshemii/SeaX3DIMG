@@ -41,10 +41,12 @@ class Trainer:
         self.scheduler = scheduler
         
         if self.cfg.loss.optimized:
-            self.loss_weights = self.cfg.loss.weight
+            self.loss_weights = self.cfg.loss.weight_debug
 
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
+        
+        self.missed_dict = {k: 0 for k in ['cnt_disp', 'cnt_obj', 'cnt_cls', 'cnt_cntr', 'cnt_dim', 'cnt_yaw']}
         
         self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_3d
         self.log_dir = self.cfg.log_dir
@@ -66,41 +68,51 @@ class Trainer:
     def train_epoch(self, epoch):
         running_loss = 0.0
         avg_loss = 0.0
-                
+        
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         for batch_idx, batch in pbar:
                         
             batch["left_img"] = batch["left_img"].to(self.device)
-            batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
-            batch["right_img_previous"] = batch["right_img_previous"].to(self.device)
+            if self.cfg.model.sx3d.memory:
+                batch["left_img_previous"] = batch["left_img_previous"].to(self.device)
+                batch["right_img_previous"] = batch["right_img_previous"].to(self.device)
             
             self.optimizer.zero_grad()
             
             #create temporal memory for both left and right image from t - dt
             with autocast(device_type='cuda'):
-                
-                temporal = self.model(batch["left_img_previous"], batch["right_img_previous"],
-                                     None, create_memory = True)
-                
-                del batch["left_img_previous"], batch["right_img_previous"]
-                
-                if self.cfg.loss.aux_loss:
-                    outputs, disp, _ = self.model(batch["left_img"], batch["right_img"],
-                                                  temporal, create_memory = False)
+                # model forward
+                if self.cfg.model.sx3d.memory:
+                    temporal = self.model(batch["left_img_previous"], batch["right_img_previous"],
+                                         None, create_memory = True)
+                    del batch["left_img_previous"], batch["right_img_previous"]
+                    if self.cfg.loss.aux_loss:
+                        outputs, disp, _ = self.model(batch["left_img"], batch["right_img"],
+                                                      temporal, create_memory = False)
+                    else:
+                        outputs, _ = self.model(batch["left_img"], batch["right_img"],
+                                                temporal, create_memory = False)
+                        disp = None
+                        del temporal
+                        
                 else:
-                    outputs, _ = self.model(batch["left_img"], batch["right_img"],
-                                            temporal, create_memory = False)
-                    disp = None
+                    if self.cfg.loss.aux_loss:
+                        outputs, disp = self.model(batch["left_img"], batch["right_img"],
+                                                   None, create_memory = False)
+                    else:
+                        outputs = self.model(batch["left_img"], batch["right_img"],
+                                             None, create_memory = False)
+                        disp = None
                 
+                # model predictions
                 obj = outputs[0]
                 dim = outputs[1]
                 centerx = outputs[2]
                 cls_logits = outputs[3]
                 yaw = outputs[4]
                 
-                del temporal, batch["left_img"], batch["right_img"], outputs
-                
+                del batch["left_img"], batch["right_img"], outputs
                 assert "label" in batch.keys()
                 
                 batch["label"] = batch["label"].to(self.device)
@@ -108,61 +120,51 @@ class Trainer:
                 if self.cfg.loss.aux_loss:
                     batch["disparity"] = batch["disparity"].to(self.device)
                 
+                # Loss calculation
+                loss = {}
+                if self.cfg.loss.aux_loss:
+                    loss['disparity_loss'], cnt_disp = self.loss_fn.disparity_loss(disp, batch["disparity"])
+                    self.missed_dict['cnt_disp'] += cnt_disp
+                    del disp, batch["disparity"]
+                    
+                loss['obj_conf'], cnt_obj = self.loss_fn.object_conf_loss(obj, batch['assignment'])
+                self.missed_dict['cnt_obj'] += cnt_obj
+                loss['cls_loss'], cnt_cls = self.loss_fn.classification_loss(cls_logits, obj, batch['assignment'], batch["label"])
+                self.missed_dict['cnt_cls'] += cnt_cls
+                del cls_logits, obj
                 
-                if self.cfg.loss.optimized:
-                    loss = {}
-                    if self.cfg.loss.aux_loss:
-                        loss['disparity_loss'] = self.loss_fn.disparity_loss(disp, batch["disparity"])
-                        del disp, batch["disparity"]
-                        
-                    loss['obj_conf'] = self.loss_fn.object_conf_loss(obj, batch['assignment'])
-                    loss['cls_loss'] = self.loss_fn.classification_loss(cls_logits, obj,
-                                                                        batch['assignment'], batch["label"])
-                    del cls_logits, obj
-                    loss['center_loss'] = self.loss_fn.center_loss(centerx, batch['assignment'], batch["label"])
-                    del centerx
+                loss['center_loss'], cnt_center = self.loss_fn.center_loss(centerx, batch['assignment'], batch["label"])
+                self.missed_dict['cnt_cntr'] += cnt_center 
+                del centerx
+                
+                loss['dim_loss'], cnt_dim = self.loss_fn.dimension_loss(dim, batch['assignment'], batch["label"])
+                self.missed_dict['cnt_dim'] += cnt_dim
+                del dim
+                
+                # yaw angle loss
+                loss['yaw_angle_loss'], cnt_yaw = self.loss_fn.yaw_loss(yaw, batch['assignment'], batch["label"])
+                self.missed_dict['cnt_yaw'] += cnt_yaw
+                del yaw
+                
+                loss['total'] = self.loss_weights[0] * loss['obj_conf'] + \
+                    self.loss_weights[1] * loss['cls_loss'] + \
+                        self.loss_weights[2] * loss['center_loss'] + \
+                            self.loss_weights[3] * loss['dim_loss'] + \
+                                self.loss_weights[4] * loss['yaw_angle_loss']
+                                
+                if self.cfg.loss.aux_loss:
+                    loss['total'] += self.loss_weights[5] * loss['disparity_loss']
                     
-                    # if loss['center_loss'] == 0.0:
-                    #     valid_mask = (batch['assignment'] >= 0)
-                    #     print(f"Center loss is zero. the number of voxels assignet to an object is: {valid_mask.sum()}")
+                for key in loss.keys():
+                    print(f"The {key} value is: {loss[key]}")
                     
-                    loss['dim_loss'] = self.loss_fn.dimension_loss(dim, batch['assignment'], batch["label"])
-                    del dim
-                    
-                    # yaw angle loss
-                    loss['yaw_angle_loss'] = self.loss_fn.yaw_loss(yaw, batch['assignment'], batch["label"])
-                    del yaw
-                    
-                    loss['total'] = self.loss_weights[0] * loss['obj_conf'] + \
-                                            self.loss_weights[1] * loss['cls_loss'] + \
-                                            self.loss_weights[2] * loss['center_loss'] + \
-                                            self.loss_weights[3] * loss['dim_loss'] + \
-                                            self.loss_weights[4] * loss['yaw_angle_loss']
-                                            
-                    if self.cfg.loss.aux_loss:
-                        loss['total'] += self.loss_weights[5] * loss['disparity_loss']
-                    
-                else:
-                    loss = self.loss_fn((obj, dim, centerx, cls_logits, yaw), disp, batch["label"],
-                                        batch['assignment'], batch["disparity"])
+                if batch_idx % 20 == 0:
+                    for k in self.missed_dict.keys():
+                        print(f"Instables in {k} are: {self.missed_dict[k]}")
 
                 del batch["label"], batch['assignment']
                 
-            # print("Loss terms are explained: ...................")
-            # print(f"Disparity loss is: {loss['disparity_loss']}")
-            # print(f"Objectness loss is: {loss['obj_conf']}")
-            # print(f"Classification loss is: {loss['cls_loss']}")
-            # print(f"Center loss is: {loss['center_loss']}")
-            # print(f"Dimension loss is: {loss['dim_loss']}")
-            # print(f"yaw loss is: {loss['yaw_angle_loss']}")
-            # print(f"Total loss is: {loss['total']}")
-            # print("...........................................")
-            # TODO: must be removed
-            if torch.isnan(loss['total']) or loss['total'].item() == 0.0:
-                # Clear unused memory to reduce fragmentation (ChatGPT)
-                torch.cuda.empty_cache()
-                print(f"==> Skipping optimizer step — Loss is {loss['total'].item()}")
-                continue
+                
             
             scaler.scale(loss['total']).backward()
             scaler.step(self.optimizer)
@@ -177,7 +179,6 @@ class Trainer:
             pbar.set_postfix({'loss': f"{avg_loss:.3f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}, Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB, Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB"})
             
         self.scheduler.step()
-        
         
         avg_epoch_loss = running_loss / len(self.dataloader)
         return avg_epoch_loss

@@ -26,7 +26,11 @@ class loss3d(nn.Module):
         self.beta = self.cfg.loss.beta
         self.object_threshold = self.cfg.loss.object_threshold_loss
         self.zeta = self.cfg.loss.zeta
-              
+        self.center_scale = torch.tensor([self.cfg.grid_unc[0],
+                                          self.cfg.grid_unc[1],
+                                          self.cfg.grid_unc[2]]).to(self.cfg.device[0])
+      
+    # DONE        
     def object_conf_loss(self, pred_obj_logits, assignments):
         """
         Focal BCE loss for objectness.
@@ -34,36 +38,46 @@ class loss3d(nn.Module):
         assignments:     [B, W, H, D]
         """
         loss = []
+        count = 0
         for b in range(pred_obj_logits.shape[0]):
             mask = (assignments[b] >= -1)
             if not mask.any():
                 continue
             
             pred = pred_obj_logits[b, 0][mask]
+            pred = pred.clamp(-20, 20)
             tgt = (assignments[b][mask] >= 0).float()
-    
-            # ✅ 1. Clamp logits to avoid inf in BCE
-            pred = torch.clamp(pred, min=-20.0, max=20.0)
             
+            ##### ------- Safety check, mjst be removed -------
+            has_nan = torch.isnan(pred).any()
+            has_inf = torch.isinf(pred).any()
+            if has_nan or has_inf:
+                pred = torch.nan_to_num(pred, nan=1e-6, posinf=1e3)
+                count += 1
+            ##### --------------------------------------------
+            
+            # Standard CE with focal
             bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
-            
-            bce = torch.clamp(bce, min=0.0, max=20.0)
-            
-            pt = torch.exp(-bce)
-            pt = torch.clamp(pt, min=1e-6, max=1.0)
+            pt  = torch.exp(-bce).clamp(min=1e-6, max=1-1e-6)
             
             focal_loss = self.alpha * (1 - pt) ** self.gamma * bce
             
-            if torch.isnan(focal_loss).any() or torch.isinf(focal_loss).any():
-                continue
+            ##### ------- Safety check, mjst be removed -------
+            has_nan = torch.isnan(focal_loss).any()
+            has_inf = torch.isinf(focal_loss).any()
+            if has_nan or has_inf:
+                focal_loss = torch.nan_to_num(focal_loss, nan=1e-6, posinf=1e3)
+                count += 1
+            ##### ---------------------------------------------
             
             loss.append(focal_loss.mean())
     
         if len(loss) == 0:
-            return torch.tensor(0.0, device=pred_obj_logits.device, requires_grad=True)
+            return torch.tensor(0.0, device=pred_obj_logits.device, requires_grad=True), count
         else:
-            return torch.stack(loss).mean()
-        
+            return torch.stack(loss).mean(), count
+       
+    # DONE    
     def classification_loss(self, pred_cls_logits, pred_obj_logits, assignments, gtl):
         """
         Numerically stable classification loss with focal weighting and background KL regularization.
@@ -76,7 +90,7 @@ class loss3d(nn.Module):
         assert pred_cls_logits.shape[1] == self.num_c, "Class number mismatch in output and config"
         
         loss_terms = []
-    
+        count = 0
         for b in range(pred_cls_logits.shape[0]):
             # Masks
             obj_mask = (assignments[b] >= 0)
@@ -90,7 +104,14 @@ class loss3d(nn.Module):
                 assert (target_tensor >= 0).all(), "Target class < 0 detected"
     
                 pred_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[obj_mask].clamp(-20, 20)  # [N, num_classes]
-    
+                
+                ##### ------- Safety check, mjst be removed -------
+                has_nan = torch.isnan(pred_voxels).any()
+                has_inf = torch.isinf(pred_voxels).any()
+                if has_nan or has_inf:
+                    pred_voxels = torch.nan_to_num(pred_voxels, nan=1e-6, posinf=1e3)
+                    count += 1
+                ##### --------------------------------------------
                 # Standard CE with focal
                 ce = nn.functional.cross_entropy(pred_voxels, target_tensor, reduction='none', ignore_index=-100)
                 pt = torch.exp(-ce)
@@ -107,25 +128,33 @@ class loss3d(nn.Module):
                 high_obj_mask = torch.sigmoid(pred_obj_logits[b, 0][bg_mask]) > self.object_threshold
                 if high_obj_mask.any():
                     pred_probs_high = pred_probs[high_obj_mask]
+                    ##### ------- Safety check, mjst be removed -------
+                    has_nan = torch.isnan(pred_probs_high).any()
+                    has_inf = torch.isinf(pred_probs_high).any()
+                    if has_nan or has_inf:
+                        pred_probs_high = torch.nan_to_num(pred_probs_high, nan=1e-6, posinf=1e3)
+                        count += 1
+                    ##### --------------------------------------------
                     target_probs_high = target_probs[high_obj_mask]
                     kl_loss = nn.functional.kl_div(pred_probs_high.log(), target_probs_high, reduction='batchmean')
                     loss_terms.append(self.zeta * kl_loss)
     
         if not loss_terms:
-            return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True)
+            return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True), count
         else:
-            return torch.stack(loss_terms).mean()
-            
+            return torch.stack(loss_terms).mean(), count
+       
+    # DONE    
     def center_loss(self, pred_offsets, assignments, gtl):
         """
         The loss for center is calculated for each voxel that is assigned to a valid object
         
-        pred_offsets:   [B, 3, W, H, D]
+        pred_offsets:   [B, 3, W, H, D] --> inside the model head is normalized [-1, +1] using torch.tanh 
         assignments:    [B, W, H, D]
         gtl:            [B, 18, 12] --> gtl[b, :, 3:6] are (cx_off, ch_off, cz_off)
         """
         loss_terms = []
-    
+        count = 0
         for b in range(pred_offsets.shape[0]):
             # Mask for valid object voxels
             valid_mask = (assignments[b] >= 0)
@@ -140,10 +169,7 @@ class loss3d(nn.Module):
             voxel_centers = self.grid[i, j, k, :].to(pred_offsets.device)    # (N, 3)
             pred_offsets_valid = pred_offsets[b][:, i, j, k].permute(1, 0)   # (N, 3)
     
-            # TODO: clamping is reasonable?        
-            pred_offsets_valid = pred_offsets_valid.clamp(-50, 50)
-    
-            pred_obj_centers = voxel_centers + pred_offsets_valid
+            pred_obj_centers = voxel_centers + (pred_offsets_valid * self.center_scale)
             gt_centers = gtl[b, gt_indices, 3:6].to(pred_offsets.device)
     
             # Filter out any NaNs/Infs in pred or gt
@@ -155,25 +181,29 @@ class loss3d(nn.Module):
             gt_centers = gt_centers[valid_values]
     
             l1 = nn.functional.smooth_l1_loss(pred_obj_centers, gt_centers, reduction='none', beta=self.beta)
+            if torch.isnan(l1).any() or torch.isinf(l1).any():
+                count += 1
+                l1 = torch.nan_to_num(l1, nan=0.0, posinf=1e3, neginf=-1e3)
             l1 = l1.mean(dim=1)  # per voxel
             loss_terms.append(l1.mean())
     
         if not loss_terms:
-            return torch.tensor(0.0, device=pred_offsets.device, requires_grad=True)
+            return torch.tensor(0.0, device=pred_offsets.device, requires_grad=True), count
         else:
-            return torch.stack(loss_terms).mean()
+            return torch.stack(loss_terms).mean(), count
     
+    # DONE
     def dimension_loss(self, pred_dims, assignments, gtl):
         """
         Calculates loss only for voxels closest to the object center
         ** Dimension is constant for all voxels of an object
         
-        pred_dims:          [B, 3, W, H, D] --> (w, h, l)
+        pred_dims:          [B, 3, W, H, D] --> (w, h, l), passed already from softplus
         assignments:        [B, W, H, D]
         gtl:                [B, 18, 12] --> gtl[b, :, :3] are (w, h, l)
         """
         loss = []
-        
+        count = 0
         for b in range(pred_dims.shape[0]):
             valid_mask = (assignments[b] >= 0)
             
@@ -189,18 +219,27 @@ class loss3d(nn.Module):
             j = cv[:, 1]
             k = cv[:, 2]
             
-            pred = pred_dims[b, :, i, j, k].permute(1, 0).clamp(-40, 40)     # [U, 3]
+            pred = pred_dims[b, :, i, j, k].permute(1, 0)                    # [U, 3]
             gt = gtl[b, unique_obj_indices, :3].to(pred.device)              # [U, 3]
-    
+            
+            ##### ------- Safety check, mjst be removed -------
+            has_nan = torch.isnan(pred).any()
+            has_inf = torch.isinf(pred).any()
+            if has_nan or has_inf:
+                pred = torch.nan_to_num(pred, nan=1e-6, posinf=1e3)
+                count += 1
+            ##### --------------------------------------------
+            
             # L1 loss per object
-            l1 = nn.functional.l1_loss(pred, gt, reduction='none').mean(dim=1)  # (N_valid,)
+            l1 = nn.functional.smooth_l1_loss(pred, gt + 1e-6, reduction='none').mean(dim=1)         # (N_valid,)
             loss.append(l1.mean())
     
         if len(loss) == 0:
-            return torch.tensor(0.0, device=pred_dims.device, requires_grad=True)
+            return torch.tensor(0.0, device=pred_dims.device, requires_grad=True), count
         else:
-            return torch.stack(loss).mean()
+            return torch.stack(loss).mean(), count
         
+    # DONE
     def yaw_loss(self, pred_yaw, assignments, gtl):
         """
         Calculates loss only for voxels that are closest to the object center
@@ -210,7 +249,7 @@ class loss3d(nn.Module):
         gtl:                [B, 18, 12] --> gtl[b, :, 6] is yaw
         """
         loss_terms = []
-    
+        count = 0
         for b in range(self.B):
             valid_mask = (assignments[b] >= 0)
             
@@ -225,31 +264,41 @@ class loss3d(nn.Module):
             j = cv[:, 1]
             k = cv[:, 2]
             
-            pred = pred_yaw[b, :, i, j, k].permute(1, 0).clamp(-40, 40)        # [U, ]
+            pred = pred_yaw[b, :, i, j, k].permute(1, 0)                       # [U, ]
             gt = gtl[b, unique_obj_indices, 6].to(pred.device)                 # [U, ]
     
-            # Minimal angular difference in range [−π, π]
-            diff = (pred - gt + math.pi) % (2 * math.pi) - math.pi
+            # Sin-cos regression
+            pred_sin, pred_cos = torch.sin(pred), torch.cos(pred)
+            gt_sin, gt_cos = torch.sin(gt), torch.cos(gt)
     
-            # Smooth L1 over differences
-            loss = nn.functional.smooth_l1_loss(diff, torch.zeros_like(diff), reduction='mean', beta=self.beta)
-            loss_terms.append(loss)
+            loss_sin = nn.functional.smooth_l1_loss(pred_sin, gt_sin, reduction='mean', beta=self.beta)
+            loss_cos = nn.functional.smooth_l1_loss(pred_cos, gt_cos, reduction='mean', beta=self.beta)
+            if torch.isnan(loss_sin).any() or torch.isinf(loss_sin).any():
+                count += 1
+                loss_sin = torch.nan_to_num(loss_sin, nan=0.0, posinf=1e3, neginf=-1e3)
+                
+            if torch.isnan(loss_cos).any() or torch.isinf(loss_cos).any():
+                count += 1
+                loss_cos = torch.nan_to_num(loss_cos, nan=0.0, posinf=1e3, neginf=-1e3)
+                
+            loss_terms.append(0.5 * (loss_sin + loss_cos))
     
         if len(loss_terms) == 0:
-            return torch.tensor(0.0, device=pred_yaw.device, requires_grad=True)
+            return torch.tensor(0.0, device=pred_yaw.device, requires_grad=True), count
         else:
-            return torch.stack(loss_terms).mean()
+            return torch.stack(loss_terms).mean(), count
 
-    
+    # DONE
     def disparity_loss(self, disparity_pred, disparity_gtl):
         """
         disparity_pred: [B, 1, H/4, W/4]
         disparity_gtl:  [B, 1, H/4, W/4]
         """
         self.B = len(disparity_pred)
+        count = 0
         
         if disparity_pred.numel() == 0:
-            return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True)
+            return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True), count
     
         assert disparity_gtl.shape == disparity_pred.shape, \
             f"gt is {disparity_gtl.shape} but pred is {disparity_pred.shape}"
@@ -257,12 +306,20 @@ class loss3d(nn.Module):
         valid_mask = (disparity_gtl > 0)
     
         if not valid_mask.any():  # no valid pixels
-            return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True)
+            return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True), count
         
-        pred_valid = disparity_pred[valid_mask].clamp(-400, 500)     
+        pred_valid = disparity_pred[valid_mask]   
         gtl_valid  = disparity_gtl[valid_mask]
+        
+        ##### ------- Safety check, mjst be removed -------
+        has_nan = torch.isnan(pred_valid).any()
+        has_inf = torch.isinf(pred_valid).any()
+        if has_nan or has_inf:
+            pred_valid = torch.nan_to_num(pred_valid, nan=1e-6, posinf=1e3)
+            count += 1
+        ##### --------------------------------------------
     
-        return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta)
+        return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta), count
 
     def forward(self, prediction, disparity_pred,
                 gtl, assignments, disparity_gtl):

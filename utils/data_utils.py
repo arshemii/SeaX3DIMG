@@ -168,6 +168,8 @@ def voxel_assigner(label, cfg, debug = False):
     
     valid_obj_mask = torch.full((cfg.max_obj,), fill_value=0, dtype=torch.long)
     
+    scale = cfg.data.object_AABB_scale
+    
     assert len(label) <= cfg.max_obj
         
     if len(label) == 0:
@@ -186,9 +188,9 @@ def voxel_assigner(label, cfg, debug = False):
                 print(f"before {w}, {h}, {l}")
             
             # if object is smaller than an edge of the voxel:
-            w = torch.maximum(w, torch.tensor(cfg.grid_unc[0] * 1.02, device=w.device, dtype=w.dtype))
-            h = torch.maximum(h, torch.tensor(cfg.grid_unc[1] * 1.02, device=h.device, dtype=h.dtype))
-            l = torch.maximum(l, torch.tensor(cfg.grid_unc[2] * 1.02, device=l.device, dtype=l.dtype))
+            w = torch.maximum(w, torch.tensor(cfg.grid_unc[0] * scale, device=w.device, dtype=w.dtype))
+            h = torch.maximum(h, torch.tensor(cfg.grid_unc[1] * scale, device=h.device, dtype=h.dtype))
+            l = torch.maximum(l, torch.tensor(cfg.grid_unc[2] * scale, device=l.device, dtype=l.dtype))
             
             if debug:
                 print(f"after {w}, {h}, {l}")

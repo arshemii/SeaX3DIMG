@@ -91,47 +91,7 @@ def training(cfg):
     trainer.train()
     
 def evaluation(cfg):
-    from utils.data_utils import collate_fn
-    from utils.kitti_sx3d import kitti_sx3d
-    from SX3DIMG import get_SX3D_model
-    from proc.evaluation import evaluate_model
-    
-    
-    
-    # model preparation
-    checkpoint_dir = cfg.model.sx3d.checkpoint_bev
-    latest_ckpt = max(
-        glob.glob(os.path.join(checkpoint_dir, "checkpoint_epoch_*.pth")),
-        key=lambda x: int(re.search(r"checkpoint_epoch_(\d+).pth", x).group(1)))
-    
-    print(f"Latest checkpoint to start is: {checkpoint_dir}")
-    
-    model = get_SX3D_model(cfg)
-    model = model.to(cfg.device[0])
-    cfg.oob_mask_valid = model.return_boundary_mask()
-    checkpoint = torch.load(latest_ckpt, map_location = cfg.device[0])
-    model.load_state_dict(checkpoint['model_state'])
-    model.eval()
-    
-    dataset = kitti_sx3d(cfg)
-    
-    results = evaluate_model(model, dataset, collate_fn, cfg, debug = cfg.eval.debug)
-    
-    eval_range = cfg.eval.range if cfg.eval.range_limit else 90.0
-    
-    print(f"------------------- Evaluation Results for {eval_range} -------------------")    
-    for iou_th, res in results.items():
-        print(f"\nIoU threshold = {iou_th:.2f}")
-        print("Class |  TP   FP   FN | Precision | Recall |   AP")
-        print("--------------------------------------------------------")
-        for c, stats in res['per_class'].items():
-            print(f"{c:5d} | {stats['TP']:3d} {stats['FP']:3d} {stats['FN']:3d} "
-                  f"| {stats['precision']:.3f}    | {stats['recall']:.3f} | {stats['AP']:.5f}")
-        print("--------------------------------------------------------")
-        print(f"mAP@{iou_th:.2f} = {res['mAP']:.3f}")
-    print("=========================================================")
-
-    
+    raise NotADirectoryError("Test function is not finished yet!")
 
 def test(cfg):
     raise NotADirectoryError("Test function is not finished yet!")
