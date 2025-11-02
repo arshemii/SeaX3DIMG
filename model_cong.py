@@ -68,8 +68,8 @@ def config_generator():
     
     # exp: t_max = ... -10, eta_min: 1e-5, lr: 1.5e4
     
-    cfg.num_batch = 2
-    cfg.num_worker = 0
+    cfg.num_batch = 3
+    cfg.num_worker = 2
     
     cfg.log_dir = './logging_dir'
     cfg.logging = False
