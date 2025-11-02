@@ -68,7 +68,7 @@ def config_generator():
     
     # exp: t_max = ... -10, eta_min: 1e-5, lr: 1.5e4
     
-    cfg.num_batch = 1
+    cfg.num_batch = 2
     cfg.num_worker = 0
     
     cfg.log_dir = './logging_dir'
@@ -217,8 +217,8 @@ def config_generator():
     # order of weight:
         # obj, cls, cntr, dim, yaw, disp
     cfg.loss.weight_debug = [1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
-    #cfg.loss.weight = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]
-    cfg.loss.weight = [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    cfg.loss.weight = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]
+    #cfg.loss.weight = [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     cfg.loss.aux_loss = True
     if cfg.loss.aux_loss:
         cfg.model.return_disp = True
@@ -228,7 +228,7 @@ def config_generator():
     cfg.loss.object_threshold_loss = 0.5
     cfg.loss.zeta = 0.2    # to penalize background voxels if objectness is high
     cfg.loss.optimized = True
-    cfg.loss.debug = True
+    cfg.loss.debug = False
     
 
     cfg.eval.save_dir = './eval_dir/'
