@@ -163,6 +163,8 @@ class Trainer:
                     loss['center_loss'], cnt_center = self.loss_fn.center_loss(centerx, batch['assignment'], batch["label"])
                     self.missed_dict['cnt_cntr'] += cnt_center 
                     del centerx
+                else:
+                    loss['center_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
                 
                 if dim != None:
                     loss['dim_loss'], cnt_dim = self.loss_fn.dimension_loss(dim, batch['assignment'], batch["label"])
