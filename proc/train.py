@@ -157,6 +157,7 @@ class Trainer:
                     
                 
                 if self.cfg.loss.debug:
+                    print(f"loss weighs are: {self.loss_weights}")
                     for key in loss.keys():
                         print(f"The {key} value is: {loss[key]}")
                     if batch_idx % 20 == 0:
