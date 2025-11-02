@@ -18,7 +18,7 @@ def convbn_3d(in_planes, out_planes, kernel_size, stride,
                                     nn.BatchNorm3d(out_planes) if not gn else nn.GroupNorm(groups, out_planes))
 
 class head_3d_detection(nn.Module):
-    def __init__(self, cfg, gn=True, debug = False):
+    def __init__(self, cfg, gn=False, debug = False):
         super(head_3d_detection, self).__init__()
         
         
