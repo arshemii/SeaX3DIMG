@@ -224,7 +224,7 @@ def config_generator():
                            [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]]
     
     cfg.loss.weights = [10.0, 6.0, 3.5, 1.0, 2.0, 0.40]
-    cfg.loss.is_w_schedule = False
+    cfg.loss.is_w_schedule = True
     
     #cfg.loss.weight = [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     cfg.loss.aux_loss = True

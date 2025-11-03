@@ -68,17 +68,17 @@ class head_3d_detection(nn.Module):
 
     def forward(self, x, mode = 'eval', lw = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]):
         
-        with torch.cuda.amp.autocast(enabled=False):
-            x = x.float()
-            out = self.conv1(x)  # in:1/4 out:1/8
-            pre = self.conv2(out)  # in:1/8 out:1/8
-            pre = F.relu(pre, inplace=True)
-            out = self.conv3(pre)  # in:1/8 out:1/16
-            out = self.conv4(out)  # in:1/16 out:1/16
-            post = F.relu(self.conv5(out) + pre, inplace=True)
-            out = self.conv6(post)  # in:1/8 out:1/4
-
-            if mode == 'train' and self.cfg.loss.is_w_schedule:
+        if mode == 'train' and self.cfg.loss.is_w_schedule:
+            with torch.amp.autocast('cuda', enabled=False):
+                x = x.float()
+                out = self.conv1(x)  # in:1/4 out:1/8
+                pre = self.conv2(out)  # in:1/8 out:1/8
+                pre = F.relu(pre, inplace=True)
+                out = self.conv3(pre)  # in:1/8 out:1/16
+                out = self.conv4(out)  # in:1/16 out:1/16
+                post = F.relu(self.conv5(out) + pre, inplace=True)
+                out = self.conv6(post)  # in:1/8 out:1/4
+    
                 outputs = {}
                 lw = lw[ : -1]
                 for idx, w in enumerate(lw):
@@ -87,13 +87,13 @@ class head_3d_detection(nn.Module):
                         outputs[key] = None
                     else:
                         outputs[key] = self.head_list[idx](out)
-                        
-            else:
-                obj = self.head_list[0](out)
-                classes = self.head_list[1](out)
-                offset = self.head_list[2](out)
-                dims = self.head_list[3](out)
-                yaw = self.head_list[4](out)
+                            
+        else:
+            obj = self.head_list[0](out)
+            classes = self.head_list[1](out)
+            offset = self.head_list[2](out)
+            dims = self.head_list[3](out)
+            yaw = self.head_list[4](out)
                 
             
         if mode == 'train' and self.cfg.loss.is_w_schedule:
