@@ -12,6 +12,8 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import json
 import os
+import pandas as pd
+
 
 from torch.amp import autocast, GradScaler
 scaler = GradScaler()
@@ -104,6 +106,11 @@ class Trainer:
         print(f"Epoch {epoch} using loss weights: {self.loss_weights}")
         
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
+        
+        if self.cfg.loss.track:
+            log_df = pd.DataFrame(columns=['epoch'])
+            log_df['epoch'] = epoch
+        
         for batch_idx, batch in pbar:
                         
             batch["left_img"] = batch["left_img"].to(self.device)
@@ -218,9 +225,17 @@ class Trainer:
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
             
+            if self.cfg.loss.track:
+                if batch_idx % 30 == 0:
+                    log_df[str(batch_idx)] = avg_loss
+                
+            
             pbar.set_postfix({'loss': f"{avg_loss:.3f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}, Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB, Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB"})
             
         self.scheduler.step()
+        
+        log_filename = os.path.join(self.log_dir, f'epoch_{epoch}_log.csv')
+        log_df.to_csv(log_filename, index=False)
         
         avg_epoch_loss = running_loss / len(self.dataloader)
         return avg_epoch_loss
@@ -279,4 +294,4 @@ class Trainer:
                 os.remove(checkpoint_path_prev)
             
             # Save epoch logs
-            self.save_epoch_log(epoch, avg_loss, train_time)
+            #self.save_epoch_log(epoch, avg_loss, train_time)
