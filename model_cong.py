@@ -67,7 +67,7 @@ def config_generator():
     cfg.dev.continue_training = False
     
     
-    cfg.num_batch = 3
+    cfg.num_batch = 2
     cfg.num_worker = 2
     
     cfg.log_dir = './logging_dir'
