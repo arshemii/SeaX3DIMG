@@ -56,19 +56,18 @@ def config_generator():
     cfg.test.score_th = 0.35
     cfg.test.local_maxima_kernel = 5
     
-    cfg.dev.scheduler = 'OClr'  # options: 'OClr', 'CAlr'
+    cfg.dev.scheduler = 'CAlrW'  # options: 'OClr', 'CAlr', 'CAlrW'
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch - 4
     cfg.dev.eta_min = 1e-5
     cfg.dev.mode = 'train'
-    cfg.dev.lr = 1e-4   # TODO: Turn it bacj to 1e-4
+    cfg.dev.lr = 1.5e-4   # TODO: Turn it bacj to 1e-4
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
     
-    # exp: t_max = ... -10, eta_min: 1e-5, lr: 1.5e4
     
-    cfg.num_batch = 3
+    cfg.num_batch = 4
     cfg.num_worker = 2
     
     cfg.log_dir = './logging_dir'

@@ -190,6 +190,7 @@ class Trainer:
                 else:
                     loss['yaw_angle_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
                 
+                del batch["label"], batch['assignment']
                 loss['total'] = self.loss_weights[0] * loss['obj_conf'] + \
                     self.loss_weights[1] * loss['cls_loss'] + \
                         self.loss_weights[2] * loss['center_loss'] + \
@@ -208,13 +209,11 @@ class Trainer:
                     print(f"Weighted yaw angle loss is: {self.loss_weights[4] * loss['yaw_angle_loss']:.3f}, normal is: {loss['yaw_angle_loss']:.3f}, missed is: {self.missed_dict['cnt_yaw']}")
                     if self.cfg.loss.aux_loss:
                         print(f"Weighted disp loss is: {self.loss_weights[5] * loss['disparity_loss']:.3f}, normal is: {loss['disparity_loss']:.3f}, missed is: {self.missed_dict['cnt_disp']}")
-                                        
-                                    
+                         
+                del loss['obj_conf'], loss['cls_loss'], loss['center_loss'], loss['dim_loss'], loss['yaw_angle_loss']
+                if self.cfg.loss.aux_loss:
+                    del loss['disparity_loss']
 
-                del batch["label"], batch['assignment']
-                
-                
-            
             scaler.scale(loss['total']).backward()
             scaler.step(self.optimizer)
             scaler.update()

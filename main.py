@@ -41,7 +41,7 @@ def check_env():
     return cfg
 
 def training(cfg):
-    from torch.optim.lr_scheduler import CosineAnnealingLR, OneCycleLR
+    from torch.optim.lr_scheduler import CosineAnnealingLR, OneCycleLR, CosineAnnealingWarmRestarts
     from proc.train import Trainer
     from utils.data_utils import collate_fn
     from utils.kitti_sx3d import kitti_sx3d
@@ -68,6 +68,10 @@ def training(cfg):
         print("Training initialized and scheduled with CosineAnnealingLR")
         scheduler = CosineAnnealingLR(optimizer,
                                       T_max = cfg.dev.t_max, eta_min = cfg.dev.eta_min)
+    elif cfg.dev.scheduler == 'CAlrW':
+        print("Training initialized and scheduled with CosineAnnealingWarmRestarts")
+        scheduler = CosineAnnealingWarmRestarts(optimizer,
+                                                T_0=cfg.dev.num_epoch // 8, T_mult=2, eta_min=cfg.dev.eta_min)
     elif cfg.dev.scheduler == 'OClr':
         print("Training initialized and scheduled with OneCycleLR")
         scheduler = OneCycleLR(optimizer, max_lr=cfg.dev.lr, total_steps=cfg.dev.num_epoch * len(dataset),
