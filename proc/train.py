@@ -194,15 +194,15 @@ class Trainer:
                     
                 
                 if self.cfg.loss.debug:
-                    print(f"Weighted objectness loss is: {self.loss_weights[0] * loss['obj_conf']}, normal is: {loss['obj_conf']}")
-                    print(f"Weighted classification loss is: {self.loss_weights[1] * loss['cls_loss']}, normal is: {loss['cls_loss']}")
-                    print(f"Weighted center loss is: {self.loss_weights[2] * loss['center_loss']}, normal is: {loss['center_loss']}")
-                    print(f"Weighted dimension loss is: {self.loss_weights[3] * loss['dim_loss']}, normal is: {loss['dim_loss']}")
-                    print(f"Weighted yaw angle loss is: {self.loss_weights[4] * loss['yaw_angle_loss']}, normal is: {loss['yaw_angle_loss']}")
+                    print(f"Weighted objectness loss is: {self.loss_weights[0] * loss['obj_conf']:.3f}, normal is: {loss['obj_conf']:.3f}, missed is: {self.missed_dict['cnt_obj']}")
+                    print(f"Weighted classification loss is: {self.loss_weights[1] * loss['cls_loss']:.3f}, normal is: {loss['cls_loss']:.3f}, missed is: {self.missed_dict['cnt_cls']}")
+                    print(f"Weighted center loss is: {self.loss_weights[2] * loss['center_loss']:.3f}, normal is: {loss['center_loss']:.3f}, missed is: {self.missed_dict['cnt_cntr']}")
+                    print(f"Weighted dimension loss is: {self.loss_weights[3] * loss['dim_loss']:.3f}, normal is: {loss['dim_loss']:.3f}, missed is: {self.missed_dict['cnt_dim']}")
+                    print(f"Weighted yaw angle loss is: {self.loss_weights[4] * loss['yaw_angle_loss']:.3f}, normal is: {loss['yaw_angle_loss']:.3f}, missed is: {self.missed_dict['cnt_yaw']}")
                     if self.cfg.loss.aux_loss:
-                        print(f"Weighted disp loss is: {self.loss_weights[5] * loss['disparity_loss']}, normal is: {loss['disparity_loss']}")
-                    
-                
+                        print(f"Weighted disp loss is: {self.loss_weights[5] * loss['disparity_loss']:.3f}, normal is: {loss['disparity_loss']:.3f}, missed is: {self.missed_dict['cnt_disp']}")
+                                        
+                                    
 
                 del batch["label"], batch['assignment']
                 
