@@ -89,6 +89,14 @@ class head_3d_detection(nn.Module):
                         outputs[key] = self.head_list[idx](out)
                             
         else:
+            out = self.conv1(x)  # in:1/4 out:1/8
+            pre = self.conv2(out)  # in:1/8 out:1/8
+            pre = F.relu(pre, inplace=True)
+            out = self.conv3(pre)  # in:1/8 out:1/16
+            out = self.conv4(out)  # in:1/16 out:1/16
+            post = F.relu(self.conv5(out) + pre, inplace=True)
+            out = self.conv6(post)  # in:1/8 out:1/4
+        
             obj = self.head_list[0](out)
             classes = self.head_list[1](out)
             offset = self.head_list[2](out)
