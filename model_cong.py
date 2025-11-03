@@ -61,13 +61,13 @@ def config_generator():
     cfg.dev.t_max = cfg.dev.num_epoch - 4
     cfg.dev.eta_min = 1e-5
     cfg.dev.mode = 'train'
-    cfg.dev.lr = 1.5e-4   # TODO: Turn it bacj to 1e-4
+    cfg.dev.lr = 1.2e-4   # TODO: Turn it bacj to 1e-4
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
     
     
-    cfg.num_batch = 4
+    cfg.num_batch = 3
     cfg.num_worker = 2
     
     cfg.log_dir = './logging_dir'
