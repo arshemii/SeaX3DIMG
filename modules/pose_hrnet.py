@@ -280,6 +280,7 @@ blocks_dict = {
 class PoseHighResolutionNet(nn.Module):
 
     def __init__(self, cfg, **kwargs):
+        self.cfg = cfg
         self.inplanes = 64
         self.out = cfg.model.back.out
         extra = cfg.model.back.extra[0]
@@ -490,7 +491,7 @@ class PoseHighResolutionNet(nn.Module):
                         nn.init.constant_(m.bias, 0)
 
         if os.path.isfile(pretrained):
-            pretrained_state_dict = torch.load(pretrained, map_location=torch.device(self.cfg.device))
+            pretrained_state_dict = torch.load(pretrained, map_location=torch.device(self.cfg.device[0]))
             logger.info('=> loading pretrained model {}'.format(pretrained))
 
             need_init_state_dict = {}
