@@ -48,6 +48,7 @@ class Trainer:
         self.num_workers = self.cfg.num_worker
         
         self.missed_dict = {k: 0 for k in ['cnt_disp', 'cnt_obj', 'cnt_cls', 'cnt_cntr', 'cnt_dim', 'cnt_yaw']}
+        self.loss_weights = self.cfg.loss.weights
         self.stage_epochs = self.cfg.loss.stage_epochs  # boundaries for transitions (example)
         
         self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_3d
@@ -96,7 +97,8 @@ class Trainer:
         running_loss = 0.0
         avg_loss = 0.0
         
-        self.update_loss_weights(epoch)
+        if self.cfg.loss.is_w_schedule:
+            self.update_loss_weights(epoch)
         
         print("---------------------------------------------------------------")
         print(f"Epoch {epoch} using loss weights: {self.loss_weights}")
@@ -192,12 +194,15 @@ class Trainer:
                     
                 
                 if self.cfg.loss.debug:
-                    print(f"loss weighs are: {self.loss_weights}")
-                    for key in loss.keys():
-                        print(f"The {key} value is: {loss[key]}")
-                    if batch_idx % 20 == 0:
-                        for k in self.missed_dict.keys():
-                            print(f"Instables in {k} are: {self.missed_dict[k]}")
+                    print(f"Weighted objectness loss is: {self.loss_weights[0] * loss['obj_conf']}, normal is: {loss['obj_conf']}")
+                    print(f"Weighted classification loss is: {self.loss_weights[1] * loss['cls_loss']}, normal is: {loss['cls_loss']}")
+                    print(f"Weighted center loss is: {self.loss_weights[2] * loss['center_loss']}, normal is: {loss['center_loss']}")
+                    print(f"Weighted dimension loss is: {self.loss_weights[3] * loss['dim_loss']}, normal is: {loss['dim_loss']}")
+                    print(f"Weighted yaw angle loss is: {self.loss_weights[4] * loss['yaw_angle_loss']}, normal is: {loss['yaw_angle_loss']}")
+                    if self.cfg.loss.aux_loss:
+                        print(f"Weighted disp loss is: {self.loss_weights[5] * loss['disparity_loss']}, normal is: {loss['disparity_loss']}")
+                    
+                
 
                 del batch["label"], batch['assignment']
                 

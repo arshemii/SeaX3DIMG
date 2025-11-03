@@ -78,7 +78,7 @@ class head_3d_detection(nn.Module):
             post = F.relu(self.conv5(out) + pre, inplace=True)
             out = self.conv6(post)  # in:1/8 out:1/4
 
-            if mode == 'train':
+            if mode == 'train' and self.cfg.loss.is_w_schedule:
                 outputs = {}
                 lw = lw[ : -1]
                 for idx, w in enumerate(lw):
@@ -96,7 +96,7 @@ class head_3d_detection(nn.Module):
                 yaw = self.head_list[4](out)
                 
             
-        if mode == 'train':
+        if mode == 'train' and self.cfg.loss.is_w_schedule:
             return outputs['obj'], outputs['dim'], outputs['cntr'], outputs['clss'], outputs['yaw']
         else:
             return obj, dims, offset, classes, yaw
