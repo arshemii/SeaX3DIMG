@@ -56,7 +56,7 @@ def config_generator():
     cfg.test.score_th = 0.35
     cfg.test.local_maxima_kernel = 5
     
-    cfg.dev.scheduler = 'CAlrW'  # options: 'OClr', 'CAlr', 'CAlrW'
+    cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch - 4
     cfg.dev.eta_min = 1e-5
@@ -92,6 +92,15 @@ def config_generator():
     cfg.model.head.type = '3d_box'
     cfg.model.head.inplanes = 128
     cfg.model.back.name = 'hrnet-w48'  # other option DDRNet-23-slim
+    
+    if cfg.model.back.name == 'hrnet-w48':
+        cfg.model.back.pretrained_path = 'weights/hrnet_w48-8ef0771d.pth'
+    elif cfg.model.back.name == 'DDRNet-23-slim':
+        # cfg.model.back.bn_mom = 0.1
+        cfg.model.back.pretrained_path = 'weights/DDRNet23s_imagenet.pth'
+    else:
+        raise NotImplementedError("Only DDRNet and HRNet are available for backbone")
+    
     cfg.model.unet_cout = 2
     cfg.model.hrnet_cout = 48
     cfg.model.max_disp = 16
@@ -177,8 +186,7 @@ def config_generator():
     
     
     cfg.model.back.out = "features"
-    cfg.model.back.init_weight = False
-    cfg.model.back.pretrained_path = 'weights/hrnet_w48-8ef0771d.pth'
+    cfg.model.back.init_weight = True
     cfg.model.back.extra = [{"INP_SIZE": [288, 960],
                             "HEATMAP_SIZE": [72, 240],
                             "INP_SIZE_SCALE": [1],
