@@ -109,7 +109,7 @@ class Trainer:
         
         if self.cfg.loss.track:
             log_df = pd.DataFrame(columns=['epoch'])
-            log_df['epoch'] = epoch
+            log_df.loc[0, 'epoch'] = epoch
         
         for batch_idx, batch in pbar:
                         
@@ -227,7 +227,7 @@ class Trainer:
             
             if self.cfg.loss.track:
                 if batch_idx % 30 == 0:
-                    log_df[str(batch_idx)] = avg_loss
+                    log_df.loc[0, str(batch_idx)] = avg_loss
                 
             
             pbar.set_postfix({'loss': f"{avg_loss:.3f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}, Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB, Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB"})
