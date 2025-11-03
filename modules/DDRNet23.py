@@ -10,7 +10,7 @@ Created on Sat Oct 18 12:01:20 2025
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from collections import OrderedDict
+#from collections import OrderedDict
 
 
 BatchNorm2d = nn.BatchNorm2d
@@ -300,8 +300,8 @@ class DualResNet(nn.Module):
 
     def forward(self, x):   
 
-        width_output = x.shape[-1] // 8
-        height_output = x.shape[-2] // 8
+        width_output = x.shape[-1] // 4
+        height_output = x.shape[-2] // 4
         layers = []
 
         x = self.conv1(x)
@@ -335,32 +335,33 @@ class DualResNet(nn.Module):
                         mode='bilinear')
 
         x_ = self.layer5_(self.relu(x_))
-        x = F.interpolate(
-                        self.spp(self.layer5(self.relu(x))),
-                        size=[height_output, width_output],
-                        mode='bilinear')
+   
+        x = self.relu(x)
+        out5_ = x
+        
+        x = self.layer5(x)
+        out5 = x
+        
+        x = self.spp(x)
+        out_spp = x
+        
+        x = F.interpolate(x,
+                            size=[height_output, width_output],
+                            mode='bilinear')
 
         x_ = self.final_layer(x + x_)
 
         if self.augment: 
             x_extra = self.seghead_extra(temp)
-            return [x_, x_extra]
+            return x_, x_extra, x, out_spp, out5, out5_
         else:
             return x_      
 
-    def init_weights(self, path):
-        model = DualResNet(BasicBlock, [2, 2, 2, 2], num_classes=19, planes=32, spp_planes=128, head_planes=64, augment=True)
-        checkpoint = torch.load(path, map_location=torch.device(self.cfg.device)) 
+    def init_weights(self, path, device):
+        checkpoint = torch.load(path, map_location=device) 
+
         
-        new_state_dict = OrderedDict()
-        for k, v in checkpoint['state_dict'].items():
-            name = k[7:]  
-            new_state_dict[name] = v
-        #model_dict.update(new_state_dict)
-        #model.load_state_dict(model_dict)
-        
-        model.load_state_dict(new_state_dict, strict = False)
-        return model
+        self.load_state_dict(checkpoint, strict = False)
 
 
 
@@ -368,7 +369,7 @@ def get_pose_net(cfg, is_train, **kwargs):
     model = DualResNet(BasicBlock, [2, 2, 2, 2], num_classes=19, planes=32, spp_planes=128, head_planes=64, augment=True)
     
     if is_train and cfg.model.back.init_weight:
-        model.init_weights(cfg.model.back.pretrained_path)
+        model.init_weights(cfg.model.back.pretrained_path, cfg.device[0])
 
     return model
 
