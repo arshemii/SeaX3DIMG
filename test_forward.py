@@ -68,29 +68,21 @@ def tensor_to_image(tensor, mean, std):
 
 
 
-def test_forward(cfg, dataset):
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=True,
-                                 collate_fn=collate_fn, num_workers=cfg.num_worker)
-        
-    latest_ckpt = 'checkpoints_exp/checkpoint_epoch_29.pth'
-    
-    model = get_SX3D_model(cfg)
-    model = model.to(cfg.device[0])
-    checkpoint = torch.load(latest_ckpt, map_location = cfg.device[0])
-    model.load_state_dict(checkpoint['model_state'])
-    model = model.eval()
-    
-    
-    batch = next(iter(dataloader))
+def test_forward(cfg, dataloader, model):
+
+    import random
+
+    batch = random.choice(list(dataloader))
+
     
     with torch.no_grad():
         batch["left_img"] = batch["left_img"].to(cfg.device[0])
-        batch["left_img_previous"] = batch["left_img_previous"].to(cfg.device[0])
+        #batch["left_img_previous"] = batch["left_img_previous"].to(cfg.device[0])
         batch["right_img"] = batch["right_img"].to(cfg.device[0])
-        batch["right_img_previous"] = batch["right_img_previous"].to(cfg.device[0])
+        #batch["right_img_previous"] = batch["right_img_previous"].to(cfg.device[0])
                         
-        temporal_l = model(batch["left_img_previous"], batch["right_img_previous"], None, True)
-        outputs = model(batch["left_img"], batch["right_img"], temporal_l, False)
+        #temporal_l = model(batch["left_img_previous"], batch["right_img_previous"], None, True)
+        outputs = model(batch["left_img"], batch["right_img"], None, False)
         
     obj_out = outputs[0]
     # disparity = outputs[1].detach().cpu()
@@ -250,22 +242,39 @@ def draw_bboxes(W, Z, boxes, title="", voxel_size=(0.62, 0.70)):
 cfg = check_env()
 dataset = kitti_sx3d(cfg)
 
-output, img, ids, gtl = test_forward(cfg, dataset)
+latest_ckpt = 'checkpoints_3d/checkpoint_epoch_44.pth'
+    
+model = get_SX3D_model(cfg)
+model = model.to(cfg.device[0])
+checkpoint = torch.load(latest_ckpt, map_location = cfg.device[0])
+model.load_state_dict(checkpoint['model_state'])
+model = model.eval()
+
+dataloader = DataLoader(dataset, batch_size=1, shuffle=True,
+                                 collate_fn=collate_fn, num_workers=cfg.num_worker)
+
+output, img, ids, gtl = test_forward(cfg, dataloader, model)
 obj, dims, offset, classes, yaw = output
 
 scores = F.sigmoid(obj).to('cpu')
 probs = F.softmax(classes, dim=1).to('cpu')
 max_probs, max_indices = torch.max(probs, dim=1)
 grid = cfg.grid_forward[0].permute(3, 0, 1, 2).unsqueeze(0)
-centers = offset.to('cpu') + grid
+centers = offset.to('cpu')
+factors_tensor = torch.tensor(cfg.grid_unc, dtype=centers.dtype, device=centers.device).view(1, 3, 1, 1, 1)
+centers = centers + grid
+
 dims = dims.to('cpu')
-yaw = yaw.to('cpu')
+
+import math
+yaw = math.pi * yaw.to('cpu')
 
 indices = local_maximum(obj, cfg.test.local_maxima_kernel).to('cpu')
 b, c, w, h, z = tuple(indices.T)
 values = scores[b, c, w, h, z]  # shape [N]
 
-value_mask = values > cfg.test.score_th
+value_mask = values > 0.30
+
 K = int(value_mask.sum())
 
 objects = []
@@ -288,7 +297,10 @@ for i in range(K):
     
     objects.append(obj)
 
-    
+
+realistic_mask = (pred_boxes[:, 0] > 0.2) & (pred_boxes[:, 1] > 0.2)
+realistic_objects_pred = pred_boxes[realistic_mask]
+
 
 gt_boxes = torch.zeros(18, 5)
 
@@ -299,7 +311,7 @@ gt_boxes[:, 3] = gtl[0][:, 5]
 gt_boxes[:, 4] = gtl[0][:, 6]
 
 
-gt_boxes2 = gt_boxes[:3, :]
+gt_boxes2 = gt_boxes[:1, :]
 pred_box_ref = pred_boxes[3:, :]
 pred_opt = prepare_opt_pred(gt_boxes2)
 
@@ -307,6 +319,6 @@ pred_opt = prepare_opt_pred(gt_boxes2)
 
 
 
-draw_bboxes(32, 64, gt_boxes2, "GT")
-draw_bboxes(32, 64, pred_box_ref, "PRED")
+draw_bboxes(68, 128, gt_boxes2, "GT")
+draw_bboxes(68, 128, realistic_objects_pred, "PRED")
 cv.imshow("original image", img)
