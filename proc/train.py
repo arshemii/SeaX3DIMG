@@ -102,9 +102,9 @@ class Trainer:
         if self.cfg.loss.is_w_schedule:
             self.update_loss_weights(epoch)
         
-        print("---------------------------------------------------------------")
-        print(f"Epoch {epoch} using loss weights: {self.loss_weights}")
         
+        print(f"Epoch {epoch} using loss weights: {self.loss_weights}")
+        print("---------------------------------------------------------------")
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         
         if self.cfg.loss.track:

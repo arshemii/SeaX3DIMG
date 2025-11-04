@@ -68,6 +68,7 @@ def training(cfg):
         print("Training initialized and scheduled with CosineAnnealingLR")
         scheduler = CosineAnnealingLR(optimizer,
                                       T_max = cfg.dev.t_max, eta_min = cfg.dev.eta_min)
+        print(f"T max is: {cfg.dev.t_max}, LR is: {cfg.dev.lr}, LR min is: {cfg.dev.eta_min}, Weight decay is: {cfg.dev.weight_decay}")                         
     elif cfg.dev.scheduler == 'CAlrW':
         print("Training initialized and scheduled with CosineAnnealingWarmRestarts")
         scheduler = CosineAnnealingWarmRestarts(optimizer,
