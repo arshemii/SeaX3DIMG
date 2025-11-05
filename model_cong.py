@@ -88,10 +88,10 @@ def config_generator():
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch
-    cfg.dev.eta_min = 5e-6
+    cfg.dev.eta_min = 1.2e-5
     cfg.dev.mode = 'train'
-    cfg.dev.lr = 6.5e-5
-    cfg.dev.weight_decay = 3e-5
+    cfg.dev.lr = 1e-4
+    cfg.dev.weight_decay = 5e-5
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
     
