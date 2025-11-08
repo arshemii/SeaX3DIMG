@@ -239,9 +239,9 @@ class SX3DIMG(nn.Module):
             else:
                 return out
   
-def load_weights_from_checkpoint(model, checkpoint_path):
-    if checkpoint_path is not None:
-        ckpt = torch.load(checkpoint_path, map_location='cpu')
+def load_weights_from_checkpoint(model, checkpoint_path, device):
+    if checkpoint_path is not None:        
+        ckpt = torch.load(checkpoint_path, map_location=device)
         if 'state_dict' in ckpt:
             model.load_state_dict(ckpt['state_dict'], strict=False)
         else:
@@ -259,8 +259,8 @@ def get_SX3D_model(cfg, is_train=True):
     model = SX3DIMG(cfg, is_train_backbone=is_train_backbone)
     
     # Always try to load full model checkpoint if provided
-    if cfg.model.sx3d.use_checkpoint and cfg.model.sx3d.checkpoint:
-        load_weights_from_checkpoint(model, cfg.model.sx3d.checkpoint)
+    if cfg.model.sx3d.use_checkpoint and cfg.model.sx3d.checkpoint_exp:
+        load_weights_from_checkpoint(model, cfg.model.sx3d.checkpoint_exp, cfg.device[0])
     
     return model
     

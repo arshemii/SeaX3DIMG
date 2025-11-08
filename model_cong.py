@@ -17,8 +17,8 @@ Current values to test:
     cfg.dev.scheduler = 'CAlr'
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch
-    cfg.dev.eta_min = 5e-6
-    cfg.dev.lr = 6.5e-5
+    cfg.dev.eta_min = 8e-7
+    cfg.dev.lr = 5e-5
     cfg.dev.weight_decay = 3e-5
 
 
@@ -88,10 +88,10 @@ def config_generator():
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch
-    cfg.dev.eta_min = 1.2e-5
+    cfg.dev.eta_min = 8e-7
     cfg.dev.mode = 'train'
-    cfg.dev.lr = 1e-4
-    cfg.dev.weight_decay = 5e-5
+    cfg.dev.lr = 5e-5
+    cfg.dev.weight_decay = 3e-5
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
     
@@ -136,7 +136,8 @@ def config_generator():
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
     cfg.model.sx3d.memory = False
-    cfg.model.sx3d.use_checkpoint = False
+    cfg.model.sx3d.use_checkpoint = True
+    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/configA5nov.pth'
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
     

@@ -49,7 +49,6 @@ class Trainer:
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
         
-        self.missed_dict = {k: 0 for k in ['cnt_disp', 'cnt_obj', 'cnt_cls', 'cnt_cntr', 'cnt_dim', 'cnt_yaw']}
         self.loss_weights = self.cfg.loss.weights
         self.stage_epochs = self.cfg.loss.stage_epochs  # boundaries for transitions (example)
         
@@ -97,6 +96,22 @@ class Trainer:
     
     def train_epoch(self, epoch):
         running_loss = 0.0
+        if self.cfg.loss.track:
+            # tracking average total loss at the start and end of epoch
+            # tracking the per-loss averages at the end of epoch
+            # tracking number of incident that there are NaNs or Infs for each loss term
+            df_entry = {'epoch': epoch,
+                        'cnt_obj_Nans_Inf': 0,
+                        'cnt_cls_Nans_Inf': 0,
+                        'cnt_cntr_Nans_Inf': 0,
+                        'cnt_dim_Nans_Inf': 0,
+                        'cnt_yaw_Nans_Inf': 0}
+            if self.cfg.loss.aux_loss:
+                df_entry['cnt_disp_Nans_Inf'] = 0
+            loss_obj = loss_cls = loss_cnt = loss_dim = loss_yaw = 0.0
+            if self.cfg.loss.aux_loss:
+                loss_disp = 0.0
+        
         avg_loss = 0.0
         
         if self.cfg.loss.is_w_schedule:
@@ -106,10 +121,6 @@ class Trainer:
         print(f"Epoch {epoch} using loss weights: {self.loss_weights}")
         print("---------------------------------------------------------------")
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
-        
-        if self.cfg.loss.track:
-            log_df = pd.DataFrame(columns=['epoch'])
-            log_df.loc[0, 'epoch'] = epoch
         
         for batch_idx, batch in pbar:
                         
@@ -150,17 +161,17 @@ class Trainer:
                 if self.cfg.loss.aux_loss:
                     if disp != None:
                         loss['disparity_loss'], cnt_disp = self.loss_fn.disparity_loss(disp, batch["disparity"])
-                        self.missed_dict['cnt_disp'] += cnt_disp
+                        df_entry['cnt_disp_Nans_Inf'] += cnt_disp
                         del disp, batch["disparity"]
                     else:
                         loss['disparity_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
                     
                 if obj != None:
                     loss['obj_conf'], cnt_obj = self.loss_fn.object_conf_loss(obj, batch['assignment'])
-                    self.missed_dict['cnt_obj'] += cnt_obj
+                    df_entry['cnt_obj_Nans_Inf'] += cnt_obj
                     if cls_logits != None:
                         loss['cls_loss'], cnt_cls = self.loss_fn.classification_loss(cls_logits, obj, batch['assignment'], batch["label"])
-                        self.missed_dict['cnt_cls'] += cnt_cls
+                        df_entry['cnt_cls_Nans_Inf'] += cnt_cls
                         del cls_logits, obj
                     else:
                         loss['cls_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
@@ -170,14 +181,14 @@ class Trainer:
                 
                 if centerx != None:
                     loss['center_loss'], cnt_center = self.loss_fn.center_loss(centerx, batch['assignment'], batch["label"])
-                    self.missed_dict['cnt_cntr'] += cnt_center 
+                    df_entry['cnt_cntr_Nans_Inf'] += cnt_center 
                     del centerx
                 else:
                     loss['center_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
                 
                 if dim != None:
                     loss['dim_loss'], cnt_dim = self.loss_fn.dimension_loss(dim, batch['assignment'], batch["label"])
-                    self.missed_dict['cnt_dim'] += cnt_dim
+                    df_entry['cnt_dim_Nans_Inf'] += cnt_dim
                     del dim
                 else:
                     loss['dim_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
@@ -185,56 +196,65 @@ class Trainer:
                 # yaw angle loss
                 if yaw != None:
                     loss['yaw_angle_loss'], cnt_yaw = self.loss_fn.yaw_loss(yaw, batch['assignment'], batch["label"])
-                    self.missed_dict['cnt_yaw'] += cnt_yaw
+                    df_entry['cnt_yaw_Nans_Inf'] += cnt_yaw
                     del yaw
                 else:
                     loss['yaw_angle_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
                 
                 del batch["label"], batch['assignment']
+                
                 loss['total'] = self.loss_weights[0] * loss['obj_conf'] + \
-                    self.loss_weights[1] * loss['cls_loss'] + \
-                        self.loss_weights[2] * loss['center_loss'] + \
-                            self.loss_weights[3] * loss['dim_loss'] + \
-                                self.loss_weights[4] * loss['yaw_angle_loss']
-                                
+                                self.loss_weights[1] * loss['cls_loss'] + \
+                                self.loss_weights[2] * loss['center_loss'] + \
+                                self.loss_weights[3] * loss['dim_loss'] + \
+                                self.loss_weights[4] * loss['yaw_angle_loss']            
                 if self.cfg.loss.aux_loss:
                     loss['total'] += self.loss_weights[5] * loss['disparity_loss']
-                    
                 
-                if self.cfg.loss.debug:
-                    print(f"Weighted objectness loss is: {self.loss_weights[0] * loss['obj_conf']:.3f}, normal is: {loss['obj_conf']:.3f}, missed is: {self.missed_dict['cnt_obj']}")
-                    print(f"Weighted classification loss is: {self.loss_weights[1] * loss['cls_loss']:.3f}, normal is: {loss['cls_loss']:.3f}, missed is: {self.missed_dict['cnt_cls']}")
-                    print(f"Weighted center loss is: {self.loss_weights[2] * loss['center_loss']:.3f}, normal is: {loss['center_loss']:.3f}, missed is: {self.missed_dict['cnt_cntr']}")
-                    print(f"Weighted dimension loss is: {self.loss_weights[3] * loss['dim_loss']:.3f}, normal is: {loss['dim_loss']:.3f}, missed is: {self.missed_dict['cnt_dim']}")
-                    print(f"Weighted yaw angle loss is: {self.loss_weights[4] * loss['yaw_angle_loss']:.3f}, normal is: {loss['yaw_angle_loss']:.3f}, missed is: {self.missed_dict['cnt_yaw']}")
+                if self.cfg.loss.track:
+                    loss_obj += loss['obj_conf'].item()
+                    loss_cls += loss['cls_loss'].item()
+                    loss_cnt += loss['center_loss'].item()
+                    loss_dim += loss['dim_loss'].item()
+                    loss_yaw += loss['yaw_angle_loss'].item()
                     if self.cfg.loss.aux_loss:
-                        print(f"Weighted disp loss is: {self.loss_weights[5] * loss['disparity_loss']:.3f}, normal is: {loss['disparity_loss']:.3f}, missed is: {self.missed_dict['cnt_disp']}")
-                         
-                del loss['obj_conf'], loss['cls_loss'], loss['center_loss'], loss['dim_loss'], loss['yaw_angle_loss']
+                        loss_disp += loss['disparity_loss'].item()
+                        
+                del loss['obj_conf'], loss['cls_loss'], loss['center_loss'], loss['yaw_angle_loss'], loss['dim_loss']
                 if self.cfg.loss.aux_loss:
                     del loss['disparity_loss']
-
+                     
             scaler.scale(loss['total']).backward()
             scaler.step(self.optimizer)
             scaler.update()
-            
-            # Clear unused memory to reduce fragmentation (ChatGPT)
             torch.cuda.empty_cache()
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
             
             if self.cfg.loss.track:
-                if batch_idx % 30 == 0:
-                    log_df.loc[0, str(batch_idx)] = avg_loss
+                if batch_idx == 0:
+                    df_entry['total_loss_start'] = avg_loss
                 
-            
+                if batch_idx == len(self.dataloader) - 1:
+                    df_entry['total_loss_end'] = avg_loss
+                    df_entry['loss_obj'] = loss_obj / (batch_idx + 1)
+                    
+                    df_entry['loss_cls'] = loss_cls / (batch_idx + 1)
+                    df_entry['loss_cnt'] = loss_cnt / (batch_idx + 1)
+                    df_entry['loss_dim'] = loss_dim / (batch_idx + 1)
+                    df_entry['loss_yaw'] = loss_yaw / (batch_idx + 1)
+                    if self.cfg.loss.aux_loss:
+                        df_entry['loss_disp'] = loss_disp / (batch_idx + 1)
+
             pbar.set_postfix({'loss': f"{avg_loss:.3f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}, Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB, Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB"})
             
         self.scheduler.step()
         
-        log_filename = os.path.join(self.log_dir, f'epoch_{epoch}_log.csv')
-        log_df.to_csv(log_filename, index=False)
+        if self.cfg.loss.track:
+            log_filename = os.path.join(self.log_dir, f'epoch_{epoch}_log.csv')
+            log_df = pd.DataFrame([df_entry])
+            log_df.to_csv(log_filename, index=False)
         
         avg_epoch_loss = running_loss / len(self.dataloader)
         return avg_epoch_loss
