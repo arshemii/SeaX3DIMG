@@ -242,8 +242,9 @@ class SX3DIMG(nn.Module):
 def load_weights_from_checkpoint(model, checkpoint_path, device):
     if checkpoint_path is not None:        
         ckpt = torch.load(checkpoint_path, map_location=device)
-        if 'state_dict' in ckpt:
-            model.load_state_dict(ckpt['state_dict'], strict=False)
+        if 'model_state' in ckpt:
+            print("The provided checkpoint does have model_state key !")
+            model.load_state_dict(ckpt['model_state'], strict=False)
         else:
             model.load_state_dict(ckpt, strict=False)
 
