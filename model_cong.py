@@ -216,7 +216,7 @@ def config_generator():
     
     
     cfg.model.back.out = "features"
-    cfg.model.back.init_weight = True
+    cfg.model.back.init_weight = False
     cfg.model.back.extra = [{"INP_SIZE": [288, 960],
                             "HEATMAP_SIZE": [72, 240],
                             "INP_SIZE_SCALE": [1],
