@@ -90,7 +90,7 @@ def config_generator():
     cfg.dev.t_max = cfg.dev.num_epoch
     cfg.dev.eta_min = 8e-7
     cfg.dev.mode = 'train'
-    cfg.dev.lr = 5e-5
+    cfg.dev.lr = 1e-5
     cfg.dev.weight_decay = 3e-5
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
