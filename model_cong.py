@@ -91,7 +91,7 @@ def config_generator():
     cfg.dev.eta_min = 8e-7
     cfg.dev.mode = 'train'
     cfg.dev.lr = 6e-6
-    cfg.dev.weight_decay = 2e-6
+    cfg.dev.weight_decay = 0.0
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
     
