@@ -20,6 +20,12 @@ class kitti_sx3d(Dataset):
             self._label_parse()
             self._voxel_sup()
             self._pcl_gen()
+        elif self.mode == 'train_small':
+            self.data_dir = self.cfg.data.path + 'training/'
+            self.DF = du.parse_id_file(self.cfg.data.path + 'train_small.txt', self.data_dir)
+            self._label_parse()
+            self._voxel_sup()
+            self._pcl_gen()
         elif self.mode == 'val':
             self.data_dir = self.cfg.data.path + 'training/'
             self.DF = du.parse_id_file(self.cfg.data.path + 'val.txt', self.data_dir)

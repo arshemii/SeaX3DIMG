@@ -58,7 +58,7 @@ def training(cfg):
     
     print("Preparing dataset ...")
     
-    dataset = kitti_sx3d(cfg)
+    dataset = kitti_sx3d(cfg, mode = 'val')
     
     print("Dataset is ready. wooooow!")
          
