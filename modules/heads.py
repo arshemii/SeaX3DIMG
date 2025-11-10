@@ -5,10 +5,8 @@ Note: all the inputs to these modules are in shape:
     (1, 259, 100, 30, 70)
     where we try to keep the spatial dimension the same since they are position clues
 """
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
-#import math
 
 
 def convbn_3d(in_planes, out_planes, kernel_size, stride, 
@@ -20,8 +18,6 @@ def convbn_3d(in_planes, out_planes, kernel_size, stride,
 class head_3d_detection(nn.Module):
     def __init__(self, cfg, gn=False, debug = False):
         super(head_3d_detection, self).__init__()
-        
-        
         
         self.cfg = cfg
         self.inplanes = self.cfg.model.head.inplanes
@@ -52,61 +48,42 @@ class head_3d_detection(nn.Module):
                                                       padding=1, output_padding=1, stride=2,bias=False),
                                                        nn.BatchNorm3d(self.inplanes) if not gn else nn.GroupNorm(32, self.inplanes))
 
-        # order of head:
-            # obj, cls, cntr, dim, yaw
-        
-        self.head_order = ['obj', 'clss', 'cntr', 'dim', 'yaw']
-        
-        self.head_list = nn.ModuleList([
-                        nn.Conv3d(self.inplanes, 1, kernel_size=1),
-                        nn.Conv3d(self.inplanes, self.num_classes, kernel_size=1),
-                        nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.Tanh()),
-                        nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.Softplus()),
-                        nn.Sequential(nn.Conv3d(self.inplanes, 1, kernel_size=1), nn.Tanh())
-                    ])
-        
 
-    def forward(self, x, mode = 'eval', lw = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]):
+        self.head_modules = nn.ModuleDict({
+            'obj_head' : nn.Conv3d(self.inplanes, 1, kernel_size=1),
+            'cls_head' : nn.Conv3d(self.inplanes, self.num_classes, kernel_size=1),
+            'cnt_head' : nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.Tanh()),
+            'dim_head' : nn.Sequential(nn.Conv3d(self.inplanes, 3, kernel_size=1), nn.Softplus()),
+            'yaw_head' : nn.Sequential(nn.Conv3d(self.inplanes, 1, kernel_size=1), nn.Tanh())
+        })
         
-        if mode == 'train' and self.cfg.loss.is_w_schedule:
-            with torch.amp.autocast('cuda', enabled=False):
-                x = x.float()
-                out = self.conv1(x)  # in:1/4 out:1/8
-                pre = self.conv2(out)  # in:1/8 out:1/8
-                pre = F.relu(pre, inplace=True)
-                out = self.conv3(pre)  # in:1/8 out:1/16
-                out = self.conv4(out)  # in:1/16 out:1/16
-                post = F.relu(self.conv5(out) + pre, inplace=True)
-                out = self.conv6(post)  # in:1/8 out:1/4
-    
-                outputs = {}
-                lw = lw[ : -1]
-                for idx, w in enumerate(lw):
-                    key = self.head_order[idx]
-                    if w == 0:
-                        outputs[key] = None
-                    else:
-                        outputs[key] = self.head_list[idx](out)
+        self.head = self.cfg.loss.heads[1:]
+
+    def forward(self, x, mode = 'eval'):
+        
+        out = self.conv1(x)  # in:1/4 out:1/8
+        pre = self.conv2(out)  # in:1/8 out:1/8
+        pre = F.relu(pre, inplace=True)
+        out = self.conv3(pre)  # in:1/8 out:1/16
+        out = self.conv4(out)  # in:1/16 out:1/16
+        post = F.relu(self.conv5(out) + pre, inplace=True)
+        out = self.conv6(post)  # in:1/8 out:1/4
+        
+        if mode == 'train':
+            head_outs = []
+            for hd in self.head:
+                # self.head order is consistent with head_module order
+                head_outs.append(self.head_modules[hd](out))
+            return tuple(head_outs)
                             
         else:
-            out = self.conv1(x)  # in:1/4 out:1/8
-            pre = self.conv2(out)  # in:1/8 out:1/8
-            pre = F.relu(pre, inplace=True)
-            out = self.conv3(pre)  # in:1/8 out:1/16
-            out = self.conv4(out)  # in:1/16 out:1/16
-            post = F.relu(self.conv5(out) + pre, inplace=True)
-            out = self.conv6(post)  # in:1/8 out:1/4
-        
-            obj = self.head_list[0](out)
-            classes = self.head_list[1](out)
-            offset = self.head_list[2](out)
-            dims = self.head_list[3](out)
-            yaw = self.head_list[4](out)
-                
+            obj = self.head_modules['obj_head'](out)
+            classes = self.head_modules['cls_head'](out)
+            offset = self.head_modules['cnt_head'](out)
+            dims = self.head_modules['dim_head'](out)
+            yaw = self.head_modules['yaw_head'](out)
             
-        if mode == 'train' and self.cfg.loss.is_w_schedule:
-            return outputs['obj'], outputs['dim'], outputs['cntr'], outputs['clss'], outputs['yaw']
-        else:
-            return obj, dims, offset, classes, yaw
+            return obj, classes, offset, dims, yaw
+
 
  

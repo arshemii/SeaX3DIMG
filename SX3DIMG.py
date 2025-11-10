@@ -26,7 +26,11 @@ class SX3DIMG(nn.Module):
         self.grid_flat_filtered = self.cfg.grid_flat_filtered[0].unsqueeze(0).to(self.device) # torch.Size([1, 104031, 1, 2])
         
         self.backbone = self.feature_net()
-        self._init_head()
+        
+        if self.cfg.loss.heads != ['disp']:
+            print("The head is initialized with disparity + other outputs!")
+            self._init_head()
+            
         self._init_matching_layers()
         self.disp_feat_conv = nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=True)
         self.match_reduce = nn.Conv2d(80, 64, kernel_size=1, bias=False)
@@ -57,7 +61,6 @@ class SX3DIMG(nn.Module):
             feat_net = get_pose_net(self.cfg, self.is_train_backbone)
             feat_net.to(self.device)
         else:
-            # TODO: add another lighter feature extractor
             raise NotImplementedError("Must implement resnet with output of shape (1, 48, 128, 128)")
         return feat_net
 
@@ -190,7 +193,7 @@ class SX3DIMG(nn.Module):
         del full_voxel_flat
         return full_voxel
         
-    def forward(self, img_l, img_r, memory, create_memory = False, mode = 'eval', lw = [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]):
+    def forward(self, img_l, img_r, mode = 'train'):
         """
         img_l and img_r:    Shape (B, 3, 288, 960) --> h=288, w=960
         mem_left:           shape (B, 3, X, Y, Z)
@@ -208,36 +211,21 @@ class SX3DIMG(nn.Module):
                                                                               left_f)
         disp_upsampled = F.softplus(disp_upsampled)
         
+        if self.cfg.loss.heads == ['disp']:
+            return disp_upsampled
+        
         if not self.cfg.model.conf_voxel:
-            conf_upsampled = None    
+            conf_upsampled = None
+            
         voxel = self.voxelizer(matched_tensor, conf_upsampled) # (B, 128, X, Y, Z)
         
         del matched_tensor, left_f_inter, right_f_inter
         
-        # TODO: should be done?
-        if self.cfg.model.sx3d.memory:
-            assert memory != None or create_memory != False
-            forward_mem = self.create_memory_forward(voxel).detach()
-            if create_memory:
-                return forward_mem
-            else:
-                assert memory is not None
-                voxel = torch.cat([voxel, memory], dim=1)  # chanels --> 128 + 3
-                voxel = self.conv_agg(voxel)  # reduce channels
-                # print(voxel.shape)
-                out = self.head(voxel) # 5 tensors
-                if self.cfg.loss.aux_loss:
-                    return out, disp_upsampled, forward_mem
-                else:
-                    return out, forward_mem
-        else:
-            assert memory == None and create_memory == False
-            voxel = self.conv_agg(voxel)  # reduce channels
-            out = self.head(voxel, mode, lw) # 5 tensors
-            if self.cfg.loss.aux_loss:
-                return out, disp_upsampled
-            else:
-                return out
+        voxel = self.conv_agg(voxel)  # reduce channels
+        out = self.head(voxel, mode) # 5 tensors
+        
+        return out, disp_upsampled
+
   
 def load_weights_from_checkpoint(model, checkpoint_path, device):
     if checkpoint_path is not None:        
@@ -265,34 +253,7 @@ def get_SX3D_model(cfg, is_train=True):
     
     return model
     
-    
 
-    
-    
-    
-def model_test(mode = 'cpu'):
-    from model_cong import config_generator
-    cfg = config_generator()
-    
-    if mode == 'cpu':
-        cfg.device[0] = 'cpu'
-    
-    model = get_SX3D_model(cfg)
-    model = model.eval()
-    model = model.to(cfg.device[0])
-    
-    l = torch.randn(1, 3, 288, 960)
-    r = torch.randn(1, 3, 288, 960)
-    mem = torch.randn(1, 3, cfg.grid_resolution[0], cfg.grid_resolution[1], cfg.grid_resolution[2])
-    
-    l = l.to(cfg.device[0])
-    r = r.to(cfg.device[0])
-    mem = mem.to(cfg.device[0])
-    
-    with torch.no_grad():
-        out = model(l, r, mem)
-    
-    return out
     
     
     

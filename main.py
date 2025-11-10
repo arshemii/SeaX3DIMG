@@ -50,17 +50,14 @@ def training(cfg):
     
     device = cfg.device[0]
     
-    print("Preparing the model ...")
+    print("Preparing dataset ...")
+    dataset = kitti_sx3d(cfg, mode = 'val')
     
+    print("Preparing the model ...")
     model = get_SX3D_model(cfg)
     model.to(device)
     model.train()
     
-    print("Preparing dataset ...")
-    
-    dataset = kitti_sx3d(cfg, mode = 'val')
-    
-    print("Dataset is ready. wooooow!")
          
     optimizer = torch.optim.AdamW(model.parameters(),
                                   lr = cfg.dev.lr, weight_decay = cfg.dev.weight_decay)
@@ -95,15 +92,6 @@ def training(cfg):
     
     trainer.train()
     
-def evaluation(cfg):
-    raise NotADirectoryError("Test function is not finished yet!")
-
-def test(cfg):
-    raise NotADirectoryError("Test function is not finished yet!")
-
-def inference(cfg):
-    raise NotADirectoryError("Inference function is not finished yet!")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Main script for Detection inference. Use flags:")
@@ -122,12 +110,8 @@ if __name__ == "__main__":
     
     if cfg.dev.mode == 'train':
         training(cfg)
-    elif cfg.dev.mode == 'test':
-        test(cfg)
-    elif cfg.dev.mode == 'eval':
-        evaluation(cfg)
     else:
-        inference(cfg)
+        raise NotADirectoryError("Other modes not implemented yet!")
         
     
     

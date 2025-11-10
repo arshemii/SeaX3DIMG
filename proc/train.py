@@ -48,10 +48,7 @@ class Trainer:
 
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
-        
-        self.loss_weights = self.cfg.loss.weights
-        self.stage_epochs = self.cfg.loss.stage_epochs  # boundaries for transitions (example)
-        
+                
         self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_3d
         self.log_dir = self.cfg.log_dir
         os.makedirs(self.checkpoint_dir, exist_ok=True)
@@ -69,56 +66,13 @@ class Trainer:
     def _print_train_stats(self, epoch, avg_loss, train_time):
         print(f"Training epoch {epoch} with loss {avg_loss:.2f} in {train_time:.2f}")
     
-    def update_loss_weights(self, epoch):
-        """
-        Smoothly update self.loss_weights based on epoch using linear interpolation
-        between consecutive weight schedules.
-        """
-        w = self.cfg.loss.w_schedule  # list of lists
-        
-    
-        if epoch <= self.stage_epochs[0]:
-            self.loss_weights = w[0]
-        elif epoch < self.stage_epochs[1]:
-            alpha = (epoch - self.stage_epochs[0]) / (self.stage_epochs[1] - self.stage_epochs[0])
-            self.loss_weights = interpolate_weights(w[0], w[1], alpha)
-        elif epoch < self.stage_epochs[2]:
-            alpha = (epoch - self.stage_epochs[1]) / (self.stage_epochs[2] - self.stage_epochs[1])
-            self.loss_weights = interpolate_weights(w[1], w[2], alpha)
-        elif epoch < self.stage_epochs[3]:
-            alpha = (epoch - self.stage_epochs[2]) / (self.stage_epochs[3] - self.stage_epochs[2])
-            self.loss_weights = interpolate_weights(w[2], w[3], alpha)
-        elif epoch < self.stage_epochs[4]:
-            alpha = (epoch - self.stage_epochs[3]) / (self.stage_epochs[4] - self.stage_epochs[3])
-            self.loss_weights = interpolate_weights(w[3], w[4], alpha)
-        else:
-            self.loss_weights = w[4]
     
     def train_epoch(self, epoch):
-        running_loss = 0.0
-        if self.cfg.loss.track:
-            # tracking average total loss at the start and end of epoch
-            # tracking the per-loss averages at the end of epoch
-            # tracking number of incident that there are NaNs or Infs for each loss term
-            df_entry = {'epoch': epoch,
-                        'cnt_obj_Nans_Inf': 0,
-                        'cnt_cls_Nans_Inf': 0,
-                        'cnt_cntr_Nans_Inf': 0,
-                        'cnt_dim_Nans_Inf': 0,
-                        'cnt_yaw_Nans_Inf': 0}
-            if self.cfg.loss.aux_loss:
-                df_entry['cnt_disp_Nans_Inf'] = 0
-            loss_obj = loss_cls = loss_cnt = loss_dim = loss_yaw = 0.0
-            if self.cfg.loss.aux_loss:
-                loss_disp = 0.0
         
+        running_loss = 0.0
         avg_loss = 0.0
         
-        if self.cfg.loss.is_w_schedule:
-            self.update_loss_weights(epoch)
-        
-        
-        print(f"Epoch {epoch} using loss weights: {self.loss_weights}")
+        print(f"Epoch {epoch} using heads: self.cfg.loss.heads")
         print("---------------------------------------------------------------")
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         
@@ -130,100 +84,55 @@ class Trainer:
             self.optimizer.zero_grad()
             
             with autocast(device_type='cuda'):
-                # model forward
-                if self.cfg.loss.aux_loss:
-                    outputs, disp = self.model(batch["left_img"], batch["right_img"],
-                                               None, create_memory = False, mode = self.cfg.dev.mode,
-                                               lw = self.loss_weights)
+                if self.cfg.loss.heads == ['disp']:
+                    disp = self.model(batch["left_img"], batch["right_img"], mode = self.cfg.dev.mode)
                 else:
-                    outputs = self.model(batch["left_img"], batch["right_img"],
-                                         None, create_memory = False, mode = self.cfg.dev.mode,
-                                         lw = self.loss_weights)
-                    disp = None
+                    outputs, disp = self.model(batch["left_img"], batch["right_img"], mode = self.cfg.dev.mode)
+
                 
-                # model predictions
-                obj = outputs[0]
-                dim = outputs[1]
-                centerx = outputs[2]
-                cls_logits = outputs[3]
-                yaw = outputs[4]
-                
-                del batch["left_img"], batch["right_img"], outputs
+                del batch["left_img"], batch["right_img"]
                 assert "label" in batch.keys()
                 
-                batch["label"] = batch["label"].to(self.device)
-                batch['assignment'] = batch['assignment'].to(self.device)
-                if self.cfg.loss.aux_loss:
+                loss = {'total': 0.0}
+                if 'disp' in self.cfg.loss.heads:
                     batch["disparity"] = batch["disparity"].to(self.device)
-                
-                # Loss calculation
-                loss = {}
-                if self.cfg.loss.aux_loss:
-                    if disp != None:
-                        loss['disparity_loss'], cnt_disp = self.loss_fn.disparity_loss(disp, batch["disparity"])
-                        df_entry['cnt_disp_Nans_Inf'] += cnt_disp
-                        del disp, batch["disparity"]
-                    else:
-                        loss['disparity_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
+                    loss['disp'], _ = self.loss_fn.disparity_loss(disp, batch["disparity"])
+                    del disp, batch["disparity"]
                     
-                if obj != None:
-                    loss['obj_conf'], cnt_obj = self.loss_fn.object_conf_loss(obj, batch['assignment'])
-                    df_entry['cnt_obj_Nans_Inf'] += cnt_obj
-                    if cls_logits != None:
-                        loss['cls_loss'], cnt_cls = self.loss_fn.classification_loss(cls_logits, obj, batch['assignment'], batch["label"])
-                        df_entry['cnt_cls_Nans_Inf'] += cnt_cls
-                        del cls_logits, obj
-                    else:
-                        loss['cls_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
-                        del obj
+                if 'obj_head' in self.cfg.loss.heads:
+                    batch['assignment'] = batch['assignment'].to(self.device)
+                    loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])
+                    
+                if 'cls_head' in self.cfg.loss.heads:
+                    batch["label"] = batch["label"].to(self.device)
+                    loss['cls_head'], _ = self.loss_fn.classification_loss(outputs[1], outputs[0],
+                                                                           batch['assignment'], batch["label"])
+                
+                if 'cnt_head' in self.cfg.loss.heads:
+                    loss['cnt_head'], _ = self.loss_fn.center_loss(outputs[2], batch['assignment'], batch["label"])
+
+                if 'dim_head' in self.cfg.loss.heads:
+                    loss['dim_head'], _ = self.loss_fn.dimension_loss(outputs[3], batch['assignment'], batch["label"])
+                    
+                if 'yaw_head' in self.cfg.loss.heads:
+                    loss['yaw_head'], _ = self.loss_fn.yaw_loss(outputs[4], batch['assignment'], batch["label"])
+                    
+                
+                del batch["label"], batch['assignment'], outputs
+                
+                if len(self.cfg.loss.heads[1:]) == 0:
+                    loss['total'] = loss['disp']
+                    del loss['disp']
                 else:
-                    loss['obj_conf'] = torch.tensor(0.0, device=self.device, requires_grad=True)
-                
-                if centerx != None:
-                    loss['center_loss'], cnt_center = self.loss_fn.center_loss(centerx, batch['assignment'], batch["label"])
-                    df_entry['cnt_cntr_Nans_Inf'] += cnt_center 
-                    del centerx
-                else:
-                    loss['center_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
-                
-                if dim != None:
-                    loss['dim_loss'], cnt_dim = self.loss_fn.dimension_loss(dim, batch['assignment'], batch["label"])
-                    df_entry['cnt_dim_Nans_Inf'] += cnt_dim
-                    del dim
-                else:
-                    loss['dim_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
-                
-                # yaw angle loss
-                if yaw != None:
-                    loss['yaw_angle_loss'], cnt_yaw = self.loss_fn.yaw_loss(yaw, batch['assignment'], batch["label"])
-                    df_entry['cnt_yaw_Nans_Inf'] += cnt_yaw
-                    del yaw
-                else:
-                    loss['yaw_angle_loss'] = torch.tensor(0.0, device=self.device, requires_grad=True)
-                
-                del batch["label"], batch['assignment']
-                
-                loss['total'] = self.loss_weights[0] * loss['obj_conf'] + \
-                                self.loss_weights[1] * loss['cls_loss'] + \
-                                self.loss_weights[2] * loss['center_loss'] + \
-                                self.loss_weights[3] * loss['dim_loss'] + \
-                                self.loss_weights[4] * loss['yaw_angle_loss']            
-                if self.cfg.loss.aux_loss:
-                    loss['total'] += self.loss_weights[5] * loss['disparity_loss']
-                
-                if self.cfg.loss.track:
-                    loss_obj += loss['obj_conf'].item()
-                    loss_cls += loss['cls_loss'].item()
-                    loss_cnt += loss['center_loss'].item()
-                    loss_dim += loss['dim_loss'].item()
-                    loss_yaw += loss['yaw_angle_loss'].item()
-                    if self.cfg.loss.aux_loss:
-                        loss_disp += loss['disparity_loss'].item()
+                    for loss_t in self.cfg.loss.heads[:-1]:
+                        loss['total'] += loss[loss_t]
+                        del loss[loss_t]
                         
-                del loss['obj_conf'], loss['cls_loss'], loss['center_loss'], loss['yaw_angle_loss'], loss['dim_loss']
-                if self.cfg.loss.aux_loss:
-                    del loss['disparity_loss']
-                     
+                    loss['total'] = loss[self.cfg.loss.heads[-1]] + \
+                                    self.cfg.loss.w_total_previous * loss['total']
+                    del loss[self.cfg.loss.heads[-1]]
+              
+         
             scaler.scale(loss['total']).backward()
             scaler.step(self.optimizer)
             scaler.update()
@@ -232,29 +141,10 @@ class Trainer:
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
             
-            if self.cfg.loss.track:
-                if batch_idx == 0:
-                    df_entry['total_loss_start'] = avg_loss
-                
-                if batch_idx == len(self.dataloader) - 1:
-                    df_entry['total_loss_end'] = avg_loss
-                    df_entry['loss_obj'] = loss_obj / (batch_idx + 1)
-                    
-                    df_entry['loss_cls'] = loss_cls / (batch_idx + 1)
-                    df_entry['loss_cnt'] = loss_cnt / (batch_idx + 1)
-                    df_entry['loss_dim'] = loss_dim / (batch_idx + 1)
-                    df_entry['loss_yaw'] = loss_yaw / (batch_idx + 1)
-                    if self.cfg.loss.aux_loss:
-                        df_entry['loss_disp'] = loss_disp / (batch_idx + 1)
 
             pbar.set_postfix({'loss': f"{avg_loss:.3f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}, Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB, Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB"})
             
         self.scheduler.step()
-        
-        if self.cfg.loss.track:
-            log_filename = os.path.join(self.log_dir, f'epoch_{epoch}_log.csv')
-            log_df = pd.DataFrame([df_entry])
-            log_df.to_csv(log_filename, index=False)
         
         avg_epoch_loss = running_loss / len(self.dataloader)
         return avg_epoch_loss

@@ -124,6 +124,8 @@ def config_generator():
     
     cfg.model.head.type = '3d_box'
     cfg.model.head.inplanes = 128
+    cfg.model.head.stage = ['disp',
+                            ]
     cfg.model.back.name = 'hrnet-w48'  # other option DDRNet-23-slim
     
     if cfg.model.back.name == 'hrnet-w48':
@@ -139,8 +141,7 @@ def config_generator():
     cfg.model.max_disp = 16
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
-    cfg.model.sx3d.memory = False
-    cfg.model.sx3d.use_checkpoint = True
+    cfg.model.sx3d.use_checkpoint = False
     cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/configA9.pth'
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
@@ -181,10 +182,10 @@ def config_generator():
     
     cfg.max_obj = 18
     
-    cfg.grid_size = (22.2, 8.5, 50.0)  # H from -2 to 10
+    cfg.grid_size = (22.2, 7.2, 50.0)  # H from -2 to 10
     cfg.grid_unc = (0.325, 0.36, 0.39)
     cfg.grid_resolution = tuple(int(round(size / res)) for size, res in zip(cfg.grid_size, cfg.grid_unc))
-    cfg.grid_resolution
+    #cfg.grid_resolution
     # cfg.valid_grids = [[(20.0, 10.0, 45.0), (0.62, 0.80, 0.70)],
     #                    [(20.0, 10.0, 45.0), (0.85, 0.80, 0.80)],
     #                    [(24.0, 10.0, 52.0), (0.60, 0.56, 0.59)]]
@@ -220,7 +221,7 @@ def config_generator():
     
     
     cfg.model.back.out = "features"
-    cfg.model.back.init_weight = False
+    cfg.model.back.init_weight = True
     cfg.model.back.extra = [{"INP_SIZE": [288, 960],
                             "HEATMAP_SIZE": [72, 240],
                             "INP_SIZE_SCALE": [1],
@@ -255,22 +256,15 @@ def config_generator():
                             
                             "FINAL_CONV_KERNEL": 1}]
 
-    # order of weight:
-        # obj, cls, cntr, dim, yaw, disp    
-    cfg.loss.stage_epochs = [8, 12, 15, 18, 22]
-    cfg.loss.w_schedule = [[10.0, 0.0, 0.0, 0.0, 0.0, 0.15],
-                           [10.0, 3.0, 0.0, 0.0, 0.0, 0.10],
-                           [10.0, 6.0, 0.0, 0.0, 0.0, 0.10],
-                           [10.0, 6.0, 3.0, 1.0, 1.0, 0.10],
-                           [10.0, 6.0, 7.0, 1.8, 2.0, 0.1]]
+
+    # Staging:
+    # experiment with stage 1:
+    # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
+    cfg.loss.heads = ['disp']
+    cfg.loss.w_total_previous = 0.0
+    cfg.loss.w_new_head = 1.0
     
-    cfg.loss.weights = [10.0, 6.0, 3.5, 1.0, 2.0, 0.40]
-    cfg.loss.is_w_schedule = False
-    
-    #cfg.loss.weight = [10.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    cfg.loss.aux_loss = True
-    if cfg.loss.aux_loss:
-        cfg.model.return_disp = True
+
     cfg.loss.alpha = 0.55  # TODO: if model predicts a lot of objects, increase it 
     cfg.loss.gamma = 2.0
     cfg.loss.beta = 1.4
