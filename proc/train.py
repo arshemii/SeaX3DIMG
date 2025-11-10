@@ -72,7 +72,7 @@ class Trainer:
         running_loss = 0.0
         avg_loss = 0.0
         
-        print(f"Epoch {epoch} using heads: self.cfg.loss.heads")
+        print(f"Epoch {epoch} using heads: {self.cfg.loss.heads}")
         print("---------------------------------------------------------------")
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         
@@ -118,7 +118,9 @@ class Trainer:
                     loss['yaw_head'], _ = self.loss_fn.yaw_loss(outputs[4], batch['assignment'], batch["label"])
                     
                 
-                del batch["label"], batch['assignment'], outputs
+                del batch["label"], batch['assignment']
+                if len(self.cfg.loss.heads) > 1:
+                    outputs
                 
                 if len(self.cfg.loss.heads[1:]) == 0:
                     loss['total'] = loss['disp']
