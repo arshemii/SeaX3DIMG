@@ -46,14 +46,9 @@ class SX3DIMG(nn.Module):
                                         nn.BatchNorm3d(3),
                                         nn.ReLU(inplace=True))
         
-        if self.cfg.model.sx3d.memory:
-            self.conv_agg = nn.Sequential(nn.Conv3d(131, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
-                                            nn.BatchNorm3d(self.cfg.model.head.inplanes),
-                                            nn.ReLU(inplace=True))
-        else:
-            self.conv_agg = nn.Sequential(nn.Conv3d(128, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
-                                            nn.BatchNorm3d(self.cfg.model.head.inplanes),
-                                            nn.ReLU(inplace=True))
+        self.conv_agg = nn.Sequential(nn.Conv3d(128, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
+                                      nn.BatchNorm3d(self.cfg.model.head.inplanes),
+                                      nn.ReLU(inplace=True))
 
 
     def feature_net(self):
