@@ -274,6 +274,7 @@ def config_generator():
     cfg.loss.optimized = True
     cfg.loss.debug = False
     cfg.loss.track = True
+    cfg.loss.max_disp = 192.0 * cfg.model.in_size[1] / (4 * cfg.model.orig_size[1])
     
 
     cfg.eval.save_dir = './eval_dir/'
