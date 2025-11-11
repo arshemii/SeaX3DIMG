@@ -382,7 +382,7 @@ def project_rect_to_image(pts_3d_rect, P2, im_shape):
         return np.array([]), np.array([]), np.array([])
 
     # Only keep points in front of the camera
-    mask_front = pts_3d_rect[:, 2] > 0.2
+    mask_front = pts_3d_rect[:, 2] > 2.0
     pts_3d_rect = pts_3d_rect[mask_front]
 
     if pts_3d_rect.shape[0] == 0:
