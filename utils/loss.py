@@ -290,7 +290,7 @@ class loss3d(nn.Module):
             return torch.stack(loss_terms).mean(), count
 
     # DONE
-    def disparity_loss(self, disparity_pred, disparity_gtl):
+    def disparity_loss(self, disparity_pred, disparity_gtl, normalized = True):
         """
         disparity_pred: [B, 1, H/4, W/4]
         disparity_gtl:  [B, 1, H/4, W/4]
@@ -298,8 +298,9 @@ class loss3d(nn.Module):
         self.B = len(disparity_pred)
         count = 0
 
-        disparity_pred = disparity_pred / self.cfg.loss.max_disp
-        disparity_gtl = disparity_gtl / self.cfg.loss.max_disp
+        if normalized:
+            disparity_pred = disparity_pred / self.cfg.loss.max_disp
+            disparity_gtl = disparity_gtl / self.cfg.loss.max_disp
         
         if disparity_pred.numel() == 0:
             return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True), count
@@ -323,8 +324,10 @@ class loss3d(nn.Module):
             count += 1
         ##### --------------------------------------------
 
-        return nn.functional.l1_loss(torch.log(pred_valid + 1e-6), torch.log(gtl_valid + 1e-6)), count
-        # return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta), count
+        if normalized:
+            return nn.functional.l1_loss(torch.log(pred_valid + 1e-6), torch.log(gtl_valid + 1e-6)), count
+        else:
+            return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta), count
 
     def forward(self, prediction, disparity_pred,
                 gtl, assignments, disparity_gtl):
