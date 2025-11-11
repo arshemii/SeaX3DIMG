@@ -126,8 +126,6 @@ def config_generator():
     
     cfg.model.head.type = '3d_box'
     cfg.model.head.inplanes = 128
-    cfg.model.head.stage = ['disp',
-                            ]
     cfg.model.back.name = 'hrnet-w48'  # other option DDRNet-23-slim
     
     if cfg.model.back.name == 'hrnet-w48':
