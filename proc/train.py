@@ -140,7 +140,7 @@ class Trainer:
          
             scaler.scale(loss['total']).backward()
 
-            if (batch_idx + 1) % cfg.dev.grad_steps == 0:
+            if (batch_idx + 1) % self.cfg.dev.grad_steps == 0:
                 scaler.step(self.optimizer)
                 scaler.update()
                 self.optimizer.zero_grad()
