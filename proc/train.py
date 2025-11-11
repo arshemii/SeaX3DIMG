@@ -71,6 +71,8 @@ class Trainer:
         
         running_loss = 0.0
         avg_loss = 0.0
+        loss_track_total = 0.0
+        avg_loss_track = 0.0
         
         print(f"Epoch {epoch} using heads: {self.cfg.loss.heads}")
         print("---------------------------------------------------------------")
@@ -97,6 +99,7 @@ class Trainer:
                 if 'disp' in self.cfg.loss.heads:
                     batch["disparity"] = batch["disparity"].to(self.device)
                     loss['disp'], _ = self.loss_fn.disparity_loss(disp, batch["disparity"])
+                    loss_track, _ = self.loss_fn.disparity_loss(disp, batch["disparity"], normalized = False)
                     del disp, batch["disparity"]
                     
                 if 'obj_head' in self.cfg.loss.heads:
@@ -137,17 +140,25 @@ class Trainer:
          
             scaler.scale(loss['total']).backward()
 
-            if (i + 1) % cfg.dev.grad_steps == 0:
+            if (batch_idx + 1) % cfg.dev.grad_steps == 0:
                 scaler.step(self.optimizer)
                 scaler.update()
-                optimizer.zero_grad()
+                self.optimizer.zero_grad()
             torch.cuda.empty_cache()
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
-            
 
-            pbar.set_postfix({'loss': f"{avg_loss:.3f}", 'batch': f"{batch_idx+1}/{len(self.dataloader)}, Allocated: {torch.cuda.memory_allocated() / 1e6:.1f} MB, Reserved: {torch.cuda.memory_reserved() / 1e6:.1f} MB"})
+            loss_track_total += loss_track.item()
+            avg_loss_track = loss_track_total / (batch_idx + 1)
+
+            pbar.set_postfix({
+                            'loss': f"{avg_loss:.3f}",
+                            'track loss': f"{avg_loss_track:.3f}",
+                            'batch': f"{batch_idx+1}/{len(self.dataloader)}",
+                            'Allocated': f"{torch.cuda.memory_allocated() / 1e6:.1f} MB",
+                            'Reserved': f"{torch.cuda.memory_reserved() / 1e6:.1f} MB"
+                            })
             
         self.scheduler.step()
         
