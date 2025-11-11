@@ -136,8 +136,11 @@ class Trainer:
               
          
             scaler.scale(loss['total']).backward()
-            scaler.step(self.optimizer)
-            scaler.update()
+
+            if (i + 1) % cfg.dev.grad_steps == 0:
+                scaler.step(self.optimizer)
+                scaler.update()
+                optimizer.zero_grad()
             torch.cuda.empty_cache()
             
             running_loss += loss['total'].item()
