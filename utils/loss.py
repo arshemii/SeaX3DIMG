@@ -297,6 +297,9 @@ class loss3d(nn.Module):
         """
         self.B = len(disparity_pred)
         count = 0
+
+        disparity_pred = disparity_pred / self.cfg.loss.max_disp
+        disparity_gtl = disparity_gtl / self.cfg.loss.max_disp
         
         if disparity_pred.numel() == 0:
             return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True), count
@@ -319,8 +322,9 @@ class loss3d(nn.Module):
             pred_valid = torch.nan_to_num(pred_valid, nan=1e-6, posinf=1e3)
             count += 1
         ##### --------------------------------------------
-    
-        return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta), count
+
+        return nn.functional.l1_loss(torch.log(pred_valid + 1e-6), torch.log(gtl_valid + 1e-6)), count
+        # return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta), count
 
     def forward(self, prediction, disparity_pred,
                 gtl, assignments, disparity_gtl):
