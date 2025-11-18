@@ -89,7 +89,7 @@ def config_generator():
     cfg.test.score_th = 0.35
     cfg.test.local_maxima_kernel = 9
     
-    cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
+    cfg.dev.scheduler = 'CAlrW'  # options: 'OClr', 'CAlr', 'CAlrW'
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch
     cfg.dev.grad_steps = 4

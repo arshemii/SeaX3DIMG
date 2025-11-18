@@ -69,7 +69,7 @@ def training(cfg):
     elif cfg.dev.scheduler == 'CAlrW':
         print("Training initialized and scheduled with CosineAnnealingWarmRestarts")
         scheduler = CosineAnnealingWarmRestarts(optimizer,
-                                                T_0=cfg.dev.num_epoch // 8, T_mult=2, eta_min=cfg.dev.eta_min)
+                                                T_0=cfg.dev.num_epoch // 3, T_mult=2, eta_min=cfg.dev.eta_min)
     elif cfg.dev.scheduler == 'OClr':
         print("Training initialized and scheduled with OneCycleLR")
         scheduler = OneCycleLR(optimizer, max_lr=cfg.dev.lr, total_steps=cfg.dev.num_epoch * len(dataset),
