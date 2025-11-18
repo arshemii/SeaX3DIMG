@@ -325,7 +325,8 @@ class loss3d(nn.Module):
         ##### --------------------------------------------
 
         if normalized:
-            return nn.functional.l1_loss(torch.log(pred_valid + 1e-6), torch.log(gtl_valid + 1e-6)), count
+            #return nn.functional.l1_loss(torch.log(pred_valid + 1e-6), torch.log(gtl_valid + 1e-6)), count
+            return nn.functional.smooth_l1_loss(torch.log(pred_valid + 1e-6), torch.log(gtl_valid + 1e-6)), count
         else:
             return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta), count
 

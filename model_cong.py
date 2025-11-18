@@ -89,7 +89,7 @@ def config_generator():
     cfg.test.score_th = 0.35
     cfg.test.local_maxima_kernel = 9
     
-    cfg.dev.scheduler = 'CAlrW'  # options: 'OClr', 'CAlr', 'CAlrW'
+    cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch
     cfg.dev.grad_steps = 4
@@ -188,11 +188,7 @@ def config_generator():
     cfg.grid_size = (22.2, 7.2, 50.0)  # H from -2 to 10
     cfg.grid_unc = (0.325, 0.36, 0.39)
     cfg.grid_resolution = tuple(int(round(size / res)) for size, res in zip(cfg.grid_size, cfg.grid_unc))
-    #cfg.grid_resolution
-    # cfg.valid_grids = [[(20.0, 10.0, 45.0), (0.62, 0.80, 0.70)],
-    #                    [(20.0, 10.0, 45.0), (0.85, 0.80, 0.80)],
-    #                    [(24.0, 10.0, 52.0), (0.60, 0.56, 0.59)]]
-    
+
 
     
     if cfg.grid_size[2] < 90.0:
@@ -264,7 +260,7 @@ def config_generator():
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
     cfg.loss.heads = ['disp']
-    cfg.loss.w_total_previous = 0.05
+    cfg.loss.w_total_previous = 0.15
     
 
     cfg.loss.alpha = 0.55  # TODO: if model predicts a lot of objects, increase it 
@@ -275,7 +271,7 @@ def config_generator():
     cfg.loss.optimized = True
     cfg.loss.debug = False
     cfg.loss.track = True
-    cfg.loss.max_disp = 192.0 * cfg.model.in_size[1] / (4 * cfg.model.orig_size[1])
+    cfg.loss.max_disp = 192.0 * cfg.model.in_size[1] / (cfg.model.orig_size[1])
     
 
     cfg.eval.save_dir = './eval_dir/'

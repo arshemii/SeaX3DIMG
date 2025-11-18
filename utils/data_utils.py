@@ -414,8 +414,9 @@ def create_depth_map(pcc, P2, im_shape=(375, 1242)):
     u, v, depth = project_rect_to_image(pcc, P2, im_shape)
 
     # Round to nearest pixel indices safely
-    u_idx = np.round(u).astype(np.int32)
-    v_idx = np.round(v).astype(np.int32)
+    u_idx = np.floor(u).astype(np.int32)
+    v_idx = np.floor(v).astype(np.int32)
+    
 
     # Filter inside image bounds AND remove any NaN/Inf that slipped through rounding
     valid = (u_idx >= 0) & (v_idx >= 0) & (u_idx < im_shape[1]) & (v_idx < im_shape[0]) & np.isfinite(u_idx) & np.isfinite(v_idx)
@@ -462,7 +463,7 @@ def pcl_as_depth(pcl_path, cfg, debug = False):
 
     # Add batch and channel dims for interpolation
     gt_disp = gt_disp.unsqueeze(0).unsqueeze(0)
-    pcl_down = F.interpolate(gt_disp, scale_factor=0.25, mode='bilinear', align_corners=False)
+    pcl_down = F.interpolate(gt_disp, scale_factor=0.25, mode='nearest', align_corners=False)
 
     return pcl_down.squeeze(0)
     
