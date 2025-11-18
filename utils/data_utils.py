@@ -463,8 +463,8 @@ def pcl_as_depth(pcl_path, cfg, debug = False):
 
     # Add batch and channel dims for interpolation
     gt_disp = gt_disp.unsqueeze(0).unsqueeze(0)
-    # pcl_down = F.interpolate(gt_disp, scale_factor=0.25, mode='bilinear', align_corners=False)
-    pcl_down = F.interpolate(gt_disp, scale_factor=0.25, mode='nearest')
+    pcl_down = F.interpolate(gt_disp, scale_factor=0.25, mode='bilinear', align_corners=False)
+    # pcl_down = F.interpolate(gt_disp, scale_factor=0.25, mode='nearest')
 
     return pcl_down.squeeze(0)
     
