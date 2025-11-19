@@ -123,7 +123,7 @@ class Trainer:
                 
                 del batch["label"], batch['assignment']
                 if len(self.cfg.loss.heads) > 1:
-                    outputs
+                    del outputs
                 
                 if len(self.cfg.loss.heads[1:]) == 0:
                     loss['total'] = loss['disp']
