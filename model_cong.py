@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 """
 Documentation:
-
     P value after conversion:
     tensor([[5.5771e+02, 0.0000e+00, 4.7116e+02, 3.4672e+01],
            [0.0000e+00, 5.5771e+02, 1.3361e+02, 1.6725e-01],
@@ -12,39 +11,6 @@ Documentation:
         x--> -40 to +40
         y--> -0.64 to +3.86
         z --> +94
-------------------------------------------------------------------------------------------------------------
-Current values to test:
-
-
-
-------------------------------------------------------------------------------------------------------------
-Experiments by ranking for 45 epochs:
-
-config A9nov:
-    # done on validation, initialized with A5
-    cfg.dev.scheduler = 'CAlr'
-    cfg.dev.num_epoch = 45
-    cfg.dev.t_max = cfg.dev.num_epoch
-    cfg.dev.eta_min = 8e-6
-    cfg.dev.lr = 5e-5
-    cfg.dev.weight_decay = 0.0
-
-config A5nov:
-    cfg.dev.scheduler = 'CAlr'
-    cfg.dev.num_epoch = 45
-    cfg.dev.t_max = cfg.dev.num_epoch
-    cfg.dev.eta_min = 1e-6
-    cfg.dev.lr = 8e-5
-    cfg.dev.weight_decay = 5e-5
-
-config A4nov:
-    cfg.dev.scheduler = 'CAlr'
-    cfg.dev.num_epoch = 45
-    cfg.dev.t_max = cfg.dev.num_epoch - 4
-    cfg.dev.eta_min = 1e-5
-    cfg.dev.lr = 1.1e-4
-    cfg.dev.weight_decay = 1e-4
-
 """
 
 import os
@@ -92,7 +58,7 @@ def config_generator():
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = 2 * cfg.dev.num_epoch
-    cfg.dev.grad_steps = 4
+    cfg.dev.grad_steps = 8
     cfg.dev.eta_min = cfg.dev.grad_steps * 4e-5
     cfg.dev.mode = 'train'
     cfg.dev.lr = cfg.dev.grad_steps * 1e-4
