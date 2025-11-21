@@ -147,7 +147,7 @@ class Trainer:
                 scaler.step(self.optimizer)
                 scaler.update()
                 self.optimizer.zero_grad()
-                self.scheduler.step()
+                #self.scheduler.step()
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
