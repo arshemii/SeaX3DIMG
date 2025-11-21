@@ -54,11 +54,12 @@ def config_generator():
     
     cfg.test.score_th = 0.35
     cfg.test.local_maxima_kernel = 9
-    
+
+    cfg.dev.batch_size = 2
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
     cfg.dev.num_epoch = 45
-    cfg.dev.t_max = 45
     cfg.dev.grad_steps = 8
+    cfg.dev.t_max = (cfg.dev.batch_size / cfg.dev.grad_steps) * cfg.dev.num_epoch
     cfg.dev.eta_min = 1e-4
     cfg.dev.mode = 'train'
     cfg.dev.lr = 8e-4
@@ -68,7 +69,7 @@ def config_generator():
     
     
     
-    cfg.num_batch = 2
+    cfg.num_batch = cfg.dev.batch_size
     cfg.num_worker = 2
     
     cfg.log_dir = './logging_dir'
