@@ -93,9 +93,9 @@ def config_generator():
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = 2 * cfg.dev.num_epoch
     cfg.dev.grad_steps = 4
-    cfg.dev.eta_min = cfg.dev.grad_steps * 1e-5
+    cfg.dev.eta_min = cfg.dev.grad_steps * 4e-5
     cfg.dev.mode = 'train'
-    cfg.dev.lr = cfg.dev.grad_steps * 2e-4
+    cfg.dev.lr = cfg.dev.grad_steps * 1e-4
     cfg.dev.weight_decay = 0.0
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
