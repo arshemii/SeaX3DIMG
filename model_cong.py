@@ -91,12 +91,12 @@ def config_generator():
     
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
     cfg.dev.num_epoch = 45
-    cfg.dev.t_max = cfg.dev.num_epoch
+    cfg.dev.t_max = 2 * cfg.dev.num_epoch
     cfg.dev.grad_steps = 4
-    cfg.dev.eta_min = 4e-5 * cfg.dev.grad_steps
+    cfg.dev.eta_min = 1e-5
     cfg.dev.mode = 'train'
-    cfg.dev.lr = 1e-4 * cfg.dev.grad_steps
-    cfg.dev.weight_decay = 1e-4
+    cfg.dev.lr = 2e-4
+    cfg.dev.weight_decay = 0.0
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
     
@@ -257,7 +257,7 @@ def config_generator():
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
     cfg.loss.heads = ['disp', 'obj_head']
-    cfg.loss.w_total_previous = 0.15
+    cfg.loss.w_total_previous = 0.10
     
 
     cfg.loss.alpha = 0.55  # TODO: if model predicts a lot of objects, increase it 

@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import json
 import os
-import pandas as pd
+#import pandas as pd
 
 
 from torch.amp import autocast, GradScaler
@@ -73,6 +73,8 @@ class Trainer:
         avg_loss = 0.0
         loss_track_total = 0.0
         avg_loss_track = 0.0
+        loss_track_total_obj = 0.0
+        avg_loss_track_obj = 0.0
         
         print(f"Epoch {epoch} using heads: {self.cfg.loss.heads}")
         print("---------------------------------------------------------------")
@@ -99,7 +101,6 @@ class Trainer:
                 if 'disp' in self.cfg.loss.heads:
                     batch["disparity"] = batch["disparity"].to(self.device)
                     loss['disp'], _ = self.loss_fn.disparity_loss(disp, batch["disparity"])
-                    loss_track, _ = self.loss_fn.disparity_loss(disp, batch["disparity"], normalized = False)
                     del disp, batch["disparity"]
                     
                 if 'obj_head' in self.cfg.loss.heads:
@@ -130,11 +131,13 @@ class Trainer:
                     del loss['disp']
                 else:
                     for loss_t in self.cfg.loss.heads[:-1]:
-                        loss['total'] += loss[loss_t]
+                        loss['total'] += loss[loss_t]                          
                         del loss[loss_t]
                         
+                    loss_track = loss['total']
                     loss['total'] = loss[self.cfg.loss.heads[-1]] + \
                                     self.cfg.loss.w_total_previous * loss['total']
+                    loss_track_obj = loss[self.cfg.loss.heads[-1]]
                     del loss[self.cfg.loss.heads[-1]]
               
          
@@ -151,14 +154,23 @@ class Trainer:
 
             loss_track_total += loss_track.item()
             avg_loss_track = loss_track_total / (batch_idx + 1)
+            
+            loss_track_total_obj += loss_track_obj.item()
+            avg_loss_track_obj = loss_track_total_obj / (batch_idx + 1)
 
             pbar.set_postfix({
                             'loss': f"{avg_loss:.3f}",
-                            'track loss': f"{avg_loss_track:.3f}",
-                            'batch': f"{batch_idx+1}/{len(self.dataloader)}",
-                            'Allocated': f"{torch.cuda.memory_allocated() / 1e6:.1f} MB",
-                            'Reserved': f"{torch.cuda.memory_reserved() / 1e6:.1f} MB"
+                            'track loss_disp': f"{avg_loss_track:.3f}",
+                            'track loss_obj': f"{avg_loss_track_obj:.3f}",
+                            'batch': f"{batch_idx+1}/{len(self.dataloader)}"
                             })
+            
+            # pbar.set_postfix({
+            #                 'loss': f"{avg_loss:.3f}",
+            #                 'batch': f"{batch_idx+1}/{len(self.dataloader)}",
+            #                 'Allocated': f"{torch.cuda.memory_allocated() / 1e6:.1f} MB",
+            #                 'Reserved': f"{torch.cuda.memory_reserved() / 1e6:.1f} MB"
+            #                 })
             
         self.scheduler.step()
         
