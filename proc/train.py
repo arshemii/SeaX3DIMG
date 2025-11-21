@@ -79,13 +79,17 @@ class Trainer:
         print(f"Epoch {epoch} using heads: {self.cfg.loss.heads}")
         print("---------------------------------------------------------------")
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
+
+        if epoch > 0:
+            self.scheduler.step()
         
         for batch_idx, batch in pbar:
                         
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
           
-            self.optimizer.zero_grad()
+            if (batch_idx % self.cfg.dev.grad_steps) == 0:
+                self.optimizer.zero_grad(set_to_none=True)
             
             with autocast(device_type='cuda'):
                 if self.cfg.loss.heads == ['disp']:
@@ -93,7 +97,6 @@ class Trainer:
                 else:
                     outputs, disp = self.model(batch["left_img"], batch["right_img"], mode = self.cfg.dev.mode)
 
-                
                 del batch["left_img"], batch["right_img"]
                 assert "label" in batch.keys()
                 
@@ -147,7 +150,6 @@ class Trainer:
                 scaler.step(self.optimizer)
                 scaler.update()
                 self.optimizer.zero_grad()
-            torch.cuda.empty_cache()
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
@@ -159,9 +161,9 @@ class Trainer:
             avg_loss_track_obj = loss_track_total_obj / (batch_idx + 1)
 
             pbar.set_postfix({
-                            'loss': f"{avg_loss:.3f}",
-                            'track loss_disp': f"{avg_loss_track:.3f}",
-                            'track loss_obj': f"{avg_loss_track_obj:.3f}",
+                            'loss': f"{avg_loss:.4f}",
+                            'track loss_disp': f"{avg_loss_track:.4f}",
+                            'track loss_obj': f"{avg_loss_track_obj:.4f}",
                             'batch': f"{batch_idx+1}/{len(self.dataloader)}"
                             })
             
@@ -172,8 +174,7 @@ class Trainer:
             #                 'Reserved': f"{torch.cuda.memory_reserved() / 1e6:.1f} MB"
             #                 })
             
-        self.scheduler.step()
-        
+        torch.cuda.empty_cache()
         avg_epoch_loss = running_loss / len(self.dataloader)
         return avg_epoch_loss
 
