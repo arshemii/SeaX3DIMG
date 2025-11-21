@@ -79,9 +79,6 @@ class Trainer:
         print(f"Epoch {epoch} using heads: {self.cfg.loss.heads}")
         print("---------------------------------------------------------------")
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
-
-        if epoch > 0:
-            self.scheduler.step()
         
         for batch_idx, batch in pbar:
                         
@@ -174,6 +171,12 @@ class Trainer:
             #                 'Reserved': f"{torch.cuda.memory_reserved() / 1e6:.1f} MB"
             #                 })
             
+        if (batch_idx + 1) % self.cfg.dev.grad_steps != 0:
+            scaler.step(self.optimizer)
+            scaler.update()
+            self.optimizer.zero_grad(set_to_none=True)
+        
+        self.scheduler.step()
         torch.cuda.empty_cache()
         avg_epoch_loss = running_loss / len(self.dataloader)
         return avg_epoch_loss
