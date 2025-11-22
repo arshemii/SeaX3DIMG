@@ -104,6 +104,7 @@ class Trainer:
                     batch['assignment'] = batch['assignment'].to(self.device)
                     loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])
                     print(f"----obj_loss----------------{loss['obj_head'].item()}")
+                    print(f"----outputs[0] shape is----------------{outputs[0].shape}")
                     print(batch["assignment"].shape)
                     print(batch["assignment"].unique())
                     print("Num positive voxels:", (batch["assignment"] > 0).sum())

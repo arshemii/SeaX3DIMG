@@ -56,6 +56,8 @@ class loss3d(nn.Module):
                 count += 1
             ##### --------------------------------------------
             
+            assert pred.device == tgt.device
+            
             # Standard CE with focal
             bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
             pt  = torch.exp(-bce).clamp(min=1e-6, max=1-1e-6)
