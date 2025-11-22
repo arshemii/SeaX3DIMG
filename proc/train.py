@@ -81,6 +81,11 @@ class Trainer:
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         
         for batch_idx, batch in pbar:
+            
+            if batch_idx == 0 and epoch == 0:
+                first_step = True
+            else:
+                first_step = False
                         
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
@@ -147,7 +152,10 @@ class Trainer:
                 scaler.step(self.optimizer)
                 scaler.update()
                 self.optimizer.zero_grad()
-                self.scheduler.step()
+                if not first_step:
+                    self.scheduler.step()
+                else:
+                    first_step = False
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
@@ -175,24 +183,6 @@ class Trainer:
         avg_epoch_loss = running_loss / len(self.dataloader)
         return avg_epoch_loss
 
-    
-    def save_epoch_log(self, epoch, loss, train_time):
-        log = {
-            'total epoch': self.num_epochs,
-            'start epoch': self.start_epoch,
-            'current epoch': epoch,
-            'loss': loss,
-            'learning rate start': self.cfg.dev.lr,
-            'Weight decay': self.cfg.dev.weight_decay,
-            'T max': self.cfg.dev.t_max,
-            'Eta min': self.cfg.dev.eta_min,
-            'train_time_sec': train_time,
-            'timestamp': time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        }
-                
-        log_filename = os.path.join(self.log_dir, f'epoch_{epoch}_log.json')
-        with open(log_filename, 'w') as f:
-            json.dump(log, f, indent=4)
     
     def train(self):
         
@@ -228,5 +218,3 @@ class Trainer:
                 print(f"Removing checkpoints of epoch: {epoch - 2} ...")
                 os.remove(checkpoint_path_prev)
             
-            # Save epoch logs
-            #self.save_epoch_log(epoch, avg_loss, train_time)
