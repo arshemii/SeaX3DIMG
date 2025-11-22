@@ -73,6 +73,8 @@ class Trainer:
         avg_loss = 0.0
         loss_track_total = 0.0
         avg_loss_track = 0.0
+        loss_tr_obj = 0.0
+        avg_loss_tr_obj = 0.0
         
         print(f"Epoch {epoch} using heads: {self.cfg.loss.heads}")
         print("---------------------------------------------------------------")
@@ -105,6 +107,8 @@ class Trainer:
                 if 'obj_head' in self.cfg.loss.heads:
                     batch['assignment'] = batch['assignment'].to(self.device)
                     loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])
+                    loss_obj = loss['obj_head']
+                    
                     
                 if 'cls_head' in self.cfg.loss.heads:
                     batch["label"] = batch["label"].to(self.device)
@@ -151,13 +155,15 @@ class Trainer:
 
             loss_track_total += loss_track.item()
             avg_loss_track = loss_track_total / (batch_idx + 1)
+            
+            loss_tr_obj = loss_obj.item()
+            avg_loss_tr_obj = loss_tr_obj / (batch_idx + 1)
 
             pbar.set_postfix({
-                            'loss': f"{avg_loss:.3f}",
-                            'track loss': f"{avg_loss_track:.3f}",
+                            'loss': f"{avg_loss:.4f}",
+                            'track loss_disp': f"{avg_loss_track:.4f}",
+                            'track_loss_obj': f"{avg_loss_tr_obj:.4f}",
                             'batch': f"{batch_idx+1}/{len(self.dataloader)}",
-                            'Allocated': f"{torch.cuda.memory_allocated() / 1e6:.1f} MB",
-                            'Reserved': f"{torch.cuda.memory_reserved() / 1e6:.1f} MB"
                             })
             
         self.scheduler.step()
