@@ -87,9 +87,9 @@ class Trainer:
             
             with autocast(device_type='cuda'):
                 if self.cfg.loss.heads == ['disp']:
-                    disp = self.model(batch["left_img"], batch["right_img"], mode = self.cfg.dev.mode)
+                    disp = self.model(batch["left_img"], batch["right_img"])
                 else:
-                    outputs, disp = self.model(batch["left_img"], batch["right_img"], mode = self.cfg.dev.mode)
+                    outputs, disp = self.model(batch["left_img"], batch["right_img"])
 
                 del batch["left_img"], batch["right_img"]
                 assert "label" in batch.keys()

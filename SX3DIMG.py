@@ -64,7 +64,10 @@ class SX3DIMG(nn.Module):
                               self.cfg.model.max_disp, 1)
 
     def _init_head(self):
-        self.head = HD.head_3d_detection(self.cfg)
+        if len(self.cfg.loss.heads) > 1:
+            self.head = HD.head_3d_detection(self.cfg)
+        else:
+            self.head = None
 
     def create_memory_forward(self, voxel):
         
@@ -217,7 +220,7 @@ class SX3DIMG(nn.Module):
         del matched_tensor, left_f_inter, right_f_inter
         
         voxel = self.conv_agg(voxel)  # reduce channels
-        out = self.head(voxel, mode) # 5 tensors
+        out = self.head(voxel) # 5 tensors
         
         return out, disp_upsampled
 
