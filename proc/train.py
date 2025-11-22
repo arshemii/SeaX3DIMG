@@ -106,7 +106,8 @@ class Trainer:
                     
                 if 'obj_head' in self.cfg.loss.heads:
                     batch['assignment'] = batch['assignment'].to(self.device)
-                    loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])                    
+                    loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])
+                    print(f"----per batch obj loss: {loss['obj_head'].item()}")                    
                     
                 if 'cls_head' in self.cfg.loss.heads:
                     batch["label"] = batch["label"].to(self.device)
@@ -137,6 +138,10 @@ class Trainer:
               
          
             scaler.scale(loss['total']).backward()
+            
+            for name, p in self.model.named_parameters():
+                if p.grad is None:
+                    print("NO GRAD:", name)
 
             if (batch_idx + 1) % self.cfg.dev.grad_steps == 0:
                 scaler.step(self.optimizer)
