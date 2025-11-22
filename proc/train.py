@@ -75,6 +75,9 @@ class Trainer:
         avg_loss_track = 0.0
         loss_track_total_obj = 0.0
         avg_loss_track_obj = 0.0
+        cnt_skip = 0
+        
+        self.optimizer.zero_grad(set_to_none=True)
         
         print(f"Epoch {epoch} using heads: {self.cfg.loss.heads}")
         print("---------------------------------------------------------------")
@@ -84,9 +87,6 @@ class Trainer:
                         
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
-          
-            if (batch_idx % self.cfg.dev.grad_steps) == 0:
-                self.optimizer.zero_grad(set_to_none=True)
             
             with autocast(device_type='cuda'):
                 if self.cfg.loss.heads == ['disp']:
@@ -144,10 +144,16 @@ class Trainer:
             scaler.scale(loss['total']).backward()
 
             if (batch_idx + 1) % self.cfg.dev.grad_steps == 0:
+                prev_scale = scaler.get_scale()
                 scaler.step(self.optimizer)
                 scaler.update()
-                self.optimizer.zero_grad()
-                self.scheduler.step()
+                
+                step_skipped = scaler.get_scale() > prev_scale
+                
+                if not step_skipped:
+                    self.optimizer.zero_grad(set_to_none=True)
+                else:
+                    cnt_skip += 1
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
@@ -160,17 +166,21 @@ class Trainer:
 
             pbar.set_postfix({
                             'loss': f"{avg_loss:.4f}",
-                            'track loss_disp': f"{avg_loss_track:.4f}",
-                            'track loss_obj': f"{avg_loss_track_obj:.4f}",
+                            'loss_disp': f"{avg_loss_track:.4f}",
+                            'loss_obj': f"{avg_loss_track_obj:.4f}",
+                            'skipped_zero': f"{cnt_skip}",
                             'batch': f"{batch_idx+1}/{len(self.dataloader)}"
                             })
             
         if (batch_idx + 1) % self.cfg.dev.grad_steps != 0:
+            prev_scale = scaler.get_scale()
             scaler.step(self.optimizer)
             scaler.update()
-            self.optimizer.zero_grad(set_to_none=True)
-            self.scheduler.step()
-            
+            step_skipped = scaler.get_scale() > prev_scale
+            if not step_skipped:
+                self.optimizer.zero_grad(set_to_none=True)
+        
+        self.scheduler.step()
         torch.cuda.empty_cache()
         avg_epoch_loss = running_loss / len(self.dataloader)
         return avg_epoch_loss

@@ -59,7 +59,7 @@ def config_generator():
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
     cfg.dev.num_epoch = 45
     cfg.dev.grad_steps = 8
-    cfg.dev.t_max = int(3766 / (cfg.dev.batch_size * cfg.dev.grad_steps) * cfg.dev.num_epoch)
+    cfg.dev.t_max = 45
     cfg.dev.eta_min = 8e-4
     cfg.dev.mode = 'train'
     cfg.dev.lr = 8e-3

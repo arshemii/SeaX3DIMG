@@ -226,7 +226,7 @@ class SX3DIMG(nn.Module):
 
 def load_weights_from_checkpoint(model, checkpoint_path, device):
     missing_keys = []
-    unexpected_keys = []
+    #unexpected_keys = []
 
     if checkpoint_path is not None:
         ckpt = torch.load(checkpoint_path, map_location=device)
@@ -239,11 +239,11 @@ def load_weights_from_checkpoint(model, checkpoint_path, device):
         load_result = model.load_state_dict(state, strict=False)
 
         missing_keys = load_result.missing_keys
-        unexpected_keys = load_result.unexpected_keys
+        #unexpected_keys = load_result.unexpected_keys
 
         print(f"Loaded checkpoint: {checkpoint_path}")
-        print("Missing keys (new layers):", missing_keys)
-        print("Unexpected keys (ignored from ckpt):", unexpected_keys)
+        #print("Missing keys (new layers):", missing_keys)
+        #print("Unexpected keys (ignored from ckpt):", unexpected_keys)
 
         return missing_keys  # we will re-init these later
 
