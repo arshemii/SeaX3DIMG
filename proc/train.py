@@ -165,19 +165,12 @@ class Trainer:
                             'batch': f"{batch_idx+1}/{len(self.dataloader)}"
                             })
             
-            # pbar.set_postfix({
-            #                 'loss': f"{avg_loss:.3f}",
-            #                 'batch': f"{batch_idx+1}/{len(self.dataloader)}",
-            #                 'Allocated': f"{torch.cuda.memory_allocated() / 1e6:.1f} MB",
-            #                 'Reserved': f"{torch.cuda.memory_reserved() / 1e6:.1f} MB"
-            #                 })
-            
         if (batch_idx + 1) % self.cfg.dev.grad_steps != 0:
             scaler.step(self.optimizer)
             scaler.update()
             self.optimizer.zero_grad(set_to_none=True)
-            #self.scheduler.step()
-        
+            self.scheduler.step()
+            
         torch.cuda.empty_cache()
         avg_epoch_loss = running_loss / len(self.dataloader)
         return avg_epoch_loss
