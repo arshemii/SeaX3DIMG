@@ -103,6 +103,10 @@ class Trainer:
                 if 'obj_head' in self.cfg.loss.heads:
                     batch['assignment'] = batch['assignment'].to(self.device)
                     loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])
+                    print(f"----obj_loss----------------{loss['obj_head'].item()}")
+                    print(batch["assignment"].shape)
+                    print(batch["assignment"].unique())
+                    print("Num positive voxels:", (batch["assignment"] > 0).sum())
                     
                 if 'cls_head' in self.cfg.loss.heads:
                     batch["label"] = batch["label"].to(self.device)
@@ -120,12 +124,11 @@ class Trainer:
                     
                 
                 del batch["label"], batch['assignment']
-                if len(self.cfg.loss.heads) > 1:
-                    del outputs
                 
                 if len(self.cfg.loss.heads[1:]) == 0:
                     loss['total'] = loss['disp']
                 else:
+                    del outputs
                     for loss_t in self.cfg.loss.heads[:-1]:
                         loss['total'] += loss[loss_t]                          
                         

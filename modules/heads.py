@@ -55,7 +55,7 @@ class head_3d_detection(nn.Module):
         self.head_modules = nn.ModuleDict()
         
         assert 'obj_head' in self.head
-        self.head_modules.append(nn.Conv3d(self.inplanes, 1, kernel_size=1))
+        self.head_modules['obj_head'] = nn.Conv3d(self.inplanes, 1, kernel_size=1)
         
         if 'cls_head' in self.head:
             self.head_modules['cls_head'] = nn.Conv3d(self.inplanes, self.num_classes, kernel_size=1)
