@@ -70,11 +70,8 @@ class Trainer:
     def train_epoch(self, epoch):
         
         running_loss = 0.0
+        loss_total_obj = 0.0  # for tracking in terminal use
         avg_loss = 0.0
-        loss_track_total = 0.0
-        avg_loss_track = 0.0
-        loss_track_total_obj = 0.0
-        avg_loss_track_obj = 0.0
         cnt_skip = 0
         
         self.optimizer.zero_grad(set_to_none=True)
@@ -128,17 +125,12 @@ class Trainer:
                 
                 if len(self.cfg.loss.heads[1:]) == 0:
                     loss['total'] = loss['disp']
-                    del loss['disp']
                 else:
                     for loss_t in self.cfg.loss.heads[:-1]:
                         loss['total'] += loss[loss_t]                          
-                        del loss[loss_t]
                         
-                    loss_track = loss['total']
                     loss['total'] = loss[self.cfg.loss.heads[-1]] + \
                                     self.cfg.loss.w_total_previous * loss['total']
-                    loss_track_obj = loss[self.cfg.loss.heads[-1]]
-                    del loss[self.cfg.loss.heads[-1]]
               
          
             scaler.scale(loss['total']).backward()
@@ -154,23 +146,17 @@ class Trainer:
                     self.optimizer.zero_grad(set_to_none=True)
                 else:
                     cnt_skip += 1
-            
+                                
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
-
-            loss_track_total += loss_track.item()
-            avg_loss_track = loss_track_total / (batch_idx + 1)
             
-            loss_track_total_obj += loss_track_obj.item()
-            avg_loss_track_obj = loss_track_total_obj / (batch_idx + 1)
+            loss_total_obj += loss['obj_head'].item()
+            avg_loss_obj = loss_total_obj / (batch_idx + 1)
 
-            pbar.set_postfix({
-                            'loss': f"{avg_loss:.4f}",
-                            'loss_disp': f"{avg_loss_track:.4f}",
-                            'loss_obj': f"{avg_loss_track_obj:.4f}",
+            pbar.set_postfix({'loss': f"{avg_loss:.4f}",
+                            'loss_obj': f"{avg_loss_obj:.4f}",
                             'skipped_zero': f"{cnt_skip}",
-                            'batch': f"{batch_idx+1}/{len(self.dataloader)}"
-                            })
+                            'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
             
         if (batch_idx + 1) % self.cfg.dev.grad_steps != 0:
             prev_scale = scaler.get_scale()
