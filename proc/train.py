@@ -147,7 +147,7 @@ class Trainer:
                 scaler.step(self.optimizer)
                 scaler.update()
                 self.optimizer.zero_grad()
-                #self.scheduler.step()
+                self.scheduler.step()
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
@@ -176,7 +176,7 @@ class Trainer:
             scaler.step(self.optimizer)
             scaler.update()
             self.optimizer.zero_grad(set_to_none=True)
-            self.scheduler.step()
+            #self.scheduler.step()
         
         torch.cuda.empty_cache()
         avg_epoch_loss = running_loss / len(self.dataloader)
