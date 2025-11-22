@@ -71,6 +71,7 @@ class Trainer:
         
         running_loss = 0.0
         avg_loss = 0.0
+        
         loss_track_total = 0.0
         avg_loss_track = 0.0
         loss_tr_obj = 0.0
@@ -101,14 +102,11 @@ class Trainer:
                 if 'disp' in self.cfg.loss.heads:
                     batch["disparity"] = batch["disparity"].to(self.device)
                     loss['disp'], _ = self.loss_fn.disparity_loss(disp, batch["disparity"])
-                    loss_track, _ = self.loss_fn.disparity_loss(disp, batch["disparity"], normalized = False)
                     del disp, batch["disparity"]
                     
                 if 'obj_head' in self.cfg.loss.heads:
                     batch['assignment'] = batch['assignment'].to(self.device)
-                    loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])
-                    loss_obj = loss['obj_head']
-                    
+                    loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])                    
                     
                 if 'cls_head' in self.cfg.loss.heads:
                     batch["label"] = batch["label"].to(self.device)
@@ -131,15 +129,12 @@ class Trainer:
                 
                 if len(self.cfg.loss.heads[1:]) == 0:
                     loss['total'] = loss['disp']
-                    del loss['disp']
                 else:
                     for loss_t in self.cfg.loss.heads[:-1]:
                         loss['total'] += loss[loss_t]
-                        del loss[loss_t]
                         
                     loss['total'] = loss[self.cfg.loss.heads[-1]] + \
-                                    self.cfg.loss.w_total_previous * loss['total']
-                    del loss[self.cfg.loss.heads[-1]]
+                                    (self.cfg.loss.w_total_previous * loss['total'])
               
          
             scaler.scale(loss['total']).backward()
@@ -153,10 +148,10 @@ class Trainer:
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
 
-            loss_track_total += loss_track.item()
+            loss_track_total += loss['disp'].item()
             avg_loss_track = loss_track_total / (batch_idx + 1)
             
-            loss_tr_obj = loss_obj.item()
+            loss_tr_obj += loss['obj_head'].item()
             avg_loss_tr_obj = loss_tr_obj / (batch_idx + 1)
 
             pbar.set_postfix({
