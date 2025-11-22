@@ -222,35 +222,83 @@ class SX3DIMG(nn.Module):
         return out, disp_upsampled
 
   
+
+
 def load_weights_from_checkpoint(model, checkpoint_path, device):
-    if checkpoint_path is not None:        
+    missing_keys = []
+    unexpected_keys = []
+
+    if checkpoint_path is not None:
         ckpt = torch.load(checkpoint_path, map_location=device)
         if 'model_state' in ckpt:
-            print("The provided checkpoint does have model_state key !")
-            model.load_state_dict(ckpt['model_state'], strict=False)
+            state = ckpt['model_state']
+            print("Checkpoint contains model_state key.")
         else:
-            model.load_state_dict(ckpt, strict=False)
+            state = ckpt
 
-        print(f"==> Loaded model checkpoint from: {checkpoint_path}")
+        load_result = model.load_state_dict(state, strict=False)
+
+        missing_keys = load_result.missing_keys
+        unexpected_keys = load_result.unexpected_keys
+
+        print(f"Loaded checkpoint: {checkpoint_path}")
+        print("Missing keys (new layers):", missing_keys)
+        print("Unexpected keys (ignored from ckpt):", unexpected_keys)
+
+        return missing_keys  # we will re-init these later
+
     else:
-        print("==> No checkpoint provided. Training from scratch or initializing backbone only.")
+        print("No checkpoint provided.")
+        return []
 
 
+def initialize_new_layers(model, missing_keys):
+    # group layers by prefix
+    reinit_modules = set(k.split('.')[0] for k in missing_keys)
+
+    for name, module in model.named_modules():
+
+        # reinitialize only modules whose name starts with a missing key prefix
+        if any(name.startswith(prefix) for prefix in reinit_modules):
+
+            if isinstance(module, nn.Conv3d) or isinstance(module, nn.Conv2d):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+
+            elif isinstance(module, nn.BatchNorm3d) or isinstance(module, nn.BatchNorm2d):
+                nn.init.constant_(module.weight, 1)
+                nn.init.constant_(module.bias, 0)
+
+            elif isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+
+            # Special: detection head final layers → zero-init
+            if hasattr(model, "head") and name.startswith("head"):
+                if isinstance(module, nn.Conv3d):
+                    nn.init.constant_(module.weight, 0)
+                    if module.bias is not None:
+                        nn.init.constant_(module.bias, 0)
+
+
+    
 def get_SX3D_model(cfg, is_train=True):
-    
-    is_train_backbone = is_train and cfg.model.back.init_weight
-    
-    model = SX3DIMG(cfg, is_train_backbone=is_train_backbone)
-    
-    # Always try to load full model checkpoint if provided
-    if cfg.model.sx3d.use_checkpoint and cfg.model.sx3d.checkpoint_exp:
-        load_weights_from_checkpoint(model, cfg.model.sx3d.checkpoint_exp, cfg.device[0])
-    
-    return model
-    
 
-    
-    
+    is_train_backbone = is_train and cfg.model.back.init_weight
+    model = SX3DIMG(cfg, is_train_backbone=is_train_backbone)
+
+    missing_keys = []
+    if cfg.model.sx3d.use_checkpoint and cfg.model.sx3d.checkpoint_exp:
+        missing_keys = load_weights_from_checkpoint(model, cfg.model.sx3d.checkpoint_exp, cfg.device[0])
+
+    # Reinitialize new/unloaded layers
+    if len(missing_keys) > 0:
+        print("Re-initializing new layers that were not in checkpoint...")
+        initialize_new_layers(model, missing_keys)
+
+    return model
     
     
     
