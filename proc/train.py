@@ -124,12 +124,11 @@ class Trainer:
                     
                 
                 del batch["label"], batch['assignment']
-                if len(self.cfg.loss.heads) > 1:
-                    del outputs
-                
+                                    
                 if len(self.cfg.loss.heads[1:]) == 0:
                     loss['total'] = loss['disp']
                 else:
+                    del outputs
                     for loss_t in self.cfg.loss.heads[:-1]:
                         loss['total'] += loss[loss_t]
                         
@@ -142,7 +141,7 @@ class Trainer:
             if (batch_idx + 1) % self.cfg.dev.grad_steps == 0:
                 scaler.step(self.optimizer)
                 scaler.update()
-                self.optimizer.zero_grad()
+                self.optimizer.zero_grad(set_to_none=True)
             torch.cuda.empty_cache()
             
             running_loss += loss['total'].item()
@@ -160,6 +159,11 @@ class Trainer:
                             'track_loss_obj': f"{avg_loss_tr_obj:.4f}",
                             'batch': f"{batch_idx+1}/{len(self.dataloader)}",
                             })
+            
+        if (batch_idx + 1) % self.cfg.dev.grad_steps != 0:
+            scaler.step(self.optimizer)
+            scaler.update()
+            self.optimizer.zero_grad(set_to_none=True)
             
         self.scheduler.step()
         
