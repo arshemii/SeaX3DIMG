@@ -10,7 +10,7 @@ import time
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import json
+#import json
 import os
 #import pandas as pd
 
@@ -81,11 +81,6 @@ class Trainer:
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         
         for batch_idx, batch in pbar:
-            
-            if batch_idx == 0 and epoch == 0:
-                first_step = True
-            else:
-                first_step = False
                         
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
@@ -152,10 +147,7 @@ class Trainer:
                 scaler.step(self.optimizer)
                 scaler.update()
                 self.optimizer.zero_grad()
-                if not first_step:
-                    self.scheduler.step()
-                else:
-                    first_step = False
+                self.scheduler.step()
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
