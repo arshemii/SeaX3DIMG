@@ -511,6 +511,7 @@ def get_pose_net(cfg, is_train, **kwargs):
     logger.info('==> The backbone is created')
     
     if is_train and cfg.model.back.init_weight:
+        print(f"==> Loaded backbone model checkpoint from: {cfg.model.back.pretrained_path}")
         model.init_weights(cfg.model.back.pretrained_path)
     # is_train == None, SX3D must have checkpoints
     # No init_weight --> From random initialization

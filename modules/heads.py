@@ -10,13 +10,13 @@ import torch.nn.functional as F
 
 
 def convbn_3d(in_planes, out_planes, kernel_size, stride, 
-              pad, dilation=1,gn=False, groups=32):
+              pad, dilation=1,gn=False, groups=8):
     return nn.Sequential(nn.Conv3d(in_planes, out_planes, kernel_size=kernel_size, 
                                    padding=pad, dilation=dilation, stride=stride, bias=False),
                                     nn.BatchNorm3d(out_planes) if not gn else nn.GroupNorm(groups, out_planes))
 
 class head_3d_detection(nn.Module):
-    def __init__(self, cfg, gn=False, debug = False):
+    def __init__(self, cfg, gn=True, debug = False):
         super(head_3d_detection, self).__init__()
         
         self.cfg = cfg

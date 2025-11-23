@@ -40,14 +40,10 @@ class SX3DIMG(nn.Module):
         self.conv2d_match = nn.Conv2d(in_channels=64, out_channels=128,
                                       kernel_size=3, padding=1, bias=False)
         self.bn_match_2 = nn.BatchNorm2d(num_features=128)
-        self.relu_matching = nn.ReLU()
-        
-        self.conv3d_mem = nn.Sequential(nn.Conv3d(128, 3, 3, padding=1, bias=False),
-                                        nn.BatchNorm3d(3),
-                                        nn.ReLU(inplace=True))
+        self.relu_matching = nn.ReLU()        
         
         self.conv_agg = nn.Sequential(nn.Conv3d(128, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
-                                      nn.BatchNorm3d(self.cfg.model.head.inplanes),
+                                      nn.GroupNorm(num_groups=8, num_channels=self.cfg.model.head.inplanes),
                                       nn.ReLU(inplace=True))
 
 
@@ -68,10 +64,6 @@ class SX3DIMG(nn.Module):
             self.head = HD.head_3d_detection(self.cfg)
         else:
             self.head = None
-
-    def create_memory_forward(self, voxel):
-        
-        return self.conv3d_mem(voxel)
     
     def matching_module(self, feature_l, feature_r, base):
         """
@@ -105,58 +97,39 @@ class SX3DIMG(nn.Module):
     
     def _voxel_filler(self, voxel, valid_indices, conf_for_points=None):
         """
-        voxel: sampled features from grid_sample -> shape: (B, C, N_valid, 1) or (B, C, N_valid)
-        valid_indices: 1D LongTensor indices into full voxel flatten position (N_valid,)
-        conf_for_points: (B,1,N_valid) confidence for each sampled point (optional)
+        voxel: (B, C, N_valid, 1) or (B, C, N_valid)
+        valid_indices: (N_valid,) — positions inside full voxel grid
+        conf_for_points: (B,1,N_valid) or None
         Returns:
-           full_voxel: (B, C, total_num_voxels) with averaged contributions
+           full_voxel: (B, C, num_voxels)
         """
-        B = voxel.size(0)
-        C = voxel.size(1)
-        N_valid = voxel.size(2)  # number of valid sampling points
     
-        # prepare full tensor and a weight counter
-        full_voxel = torch.zeros((B, C, self.num_voxels), dtype=voxel.dtype, device=voxel.device)
-        weight_accum = torch.zeros((B, 1, self.num_voxels), dtype=voxel.dtype, device=voxel.device)
-    
-        # voxel currently shape (B, C, N_valid, 1) sometimes; squeeze last dim if present
+        # ---- Normalize voxel shape ----
         if voxel.dim() == 4 and voxel.size(-1) == 1:
-            voxel = voxel.squeeze(-1)  # now (B,C,N_valid)
+            voxel = voxel.squeeze(-1)   # (B, C, N_valid)
     
-        # prepare confidence weights (default to 1)
-        if conf_for_points is None:
-            # shape (B,1,N_valid) with ones
-            conf_for_points = torch.ones((B, 1, N_valid), dtype=voxel.dtype, device=voxel.device)
-        else:
-            # ensure shape (B,1,N_valid)
+        B, C, N = voxel.shape
+        device = voxel.device
+    
+        # ---- Optional confidence weighting ----
+        if conf_for_points is not None:
             if conf_for_points.dim() == 2:
                 conf_for_points = conf_for_points.unsqueeze(1)
+            voxel = voxel * conf_for_points  # still (B,C,N)
     
-        # scatter_add the weighted features and weights
-        # we use scatter_add along the last dimension via index expansion
-        # full_voxel[b, :, idx] += voxel[b, :, :]*conf[b,0,:]
-        # vectorize using scatter_add:
-        # expand valid_indices to shape (B, C, N_valid) for feature scattering
-        idx = valid_indices.reshape(1, 1, -1).expand(B, C, -1)  # (B, C, N_valid)
-        # weights repeated to match channels
-        w = conf_for_points.expand(B, C, -1)  # (B, C, N_valid)
+        # ---- Initialize full voxel volume with zeros (OOB = zero semantics) ----
+        full_voxel = torch.zeros(
+            (B, C, self.num_voxels),
+            dtype=voxel.dtype,
+            device=device
+        )
     
-        # weighted features
-        weighted_feats = voxel * w  # (B, C, N_valid)
+        # ---- Direct assignment: each valid voxel index gets exactly 1 feature ----
+        # No scatter_add needed because no two features share the same index.
+        full_voxel[:, :, valid_indices] = voxel
     
-        # scatter_add into full_voxel
-        full_voxel = full_voxel.scatter_add(dim=2, index=idx, src=weighted_feats)
+        return full_voxel
     
-        # scatter_add weights into weight_accum
-        idx_w = valid_indices.reshape(1, 1, -1).expand(B, 1, -1)
-        weight_accum = weight_accum.scatter_add(dim=2, index=idx_w, src=conf_for_points)
-    
-        # avoid division by zero: mask where weight_accum == 0
-        nonzero = weight_accum > 0
-        # normalize features
-        full_voxel = full_voxel / (weight_accum + (1.0 - nonzero.float()))  # zeros remain zero where weight_accum is zero
-    
-        return full_voxel  # shape (B,C,num_voxels)
     
     def voxelizer(self, tensor, conf_map=None):
         """
@@ -191,7 +164,7 @@ class SX3DIMG(nn.Module):
         del full_voxel_flat
         return full_voxel
         
-    def forward(self, img_l, img_r, mode = 'train'):
+    def forward(self, img_l, img_r):
         """
         img_l and img_r:    Shape (B, 3, 288, 960) --> h=288, w=960
         mem_left:           shape (B, 3, X, Y, Z)
@@ -234,7 +207,7 @@ def load_weights_from_checkpoint(model, checkpoint_path, device):
         else:
             model.load_state_dict(ckpt, strict=False)
 
-        print(f"==> Loaded model checkpoint from: {checkpoint_path}")
+        print(f"==> Loaded whole SX3D model checkpoint from: {checkpoint_path}")
     else:
         print("==> No checkpoint provided. Training from scratch or initializing backbone only.")
 

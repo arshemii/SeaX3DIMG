@@ -10,11 +10,7 @@ import time
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import json
 import os
-import pandas as pd
-
-
 from torch.amp import autocast, GradScaler
 scaler = GradScaler()
 
@@ -72,29 +68,28 @@ class Trainer:
         running_loss = 0.0
         avg_loss = 0.0
         
-        loss_track_total = 0.0
-        avg_loss_track = 0.0
-        loss_tr_obj = 0.0
-        avg_loss_tr_obj = 0.0
+        if len(self.cfg.loss.heads) > 1:
+            loss_track_prev = 0.0
+            avg_loss_track_prev = 0.0
+            loss_track_new = 0.0
+            avg_loss_track_new = 0.0
         
         print(f"Epoch {epoch} using heads: {self.cfg.loss.heads}")
         print("---------------------------------------------------------------")
+        #self.optimizer.zero_grad()
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
         
         for batch_idx, batch in pbar:
                         
             batch["left_img"] = batch["left_img"].to(self.device)
             batch["right_img"] = batch["right_img"].to(self.device)
-          
-            self.optimizer.zero_grad()
             
             with autocast(device_type='cuda'):
                 if self.cfg.loss.heads == ['disp']:
-                    disp = self.model(batch["left_img"], batch["right_img"], mode = self.cfg.dev.mode)
+                    disp = self.model(batch["left_img"], batch["right_img"])
                 else:
-                    outputs, disp = self.model(batch["left_img"], batch["right_img"], mode = self.cfg.dev.mode)
+                    outputs, disp = self.model(batch["left_img"], batch["right_img"])
 
-                
                 del batch["left_img"], batch["right_img"]
                 assert "label" in batch.keys()
                 
@@ -107,7 +102,6 @@ class Trainer:
                 if 'obj_head' in self.cfg.loss.heads:
                     batch['assignment'] = batch['assignment'].to(self.device)
                     loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])
-                    print(f"----per batch obj loss: {loss['obj_head'].item()}")                    
                     
                 if 'cls_head' in self.cfg.loss.heads:
                     batch["label"] = batch["label"].to(self.device)
@@ -132,38 +126,41 @@ class Trainer:
                     del outputs
                     for loss_t in self.cfg.loss.heads[:-1]:
                         loss['total'] += loss[loss_t]
-                        
+
+                    loss_track_prev += loss['total'].item()
                     loss['total'] = loss[self.cfg.loss.heads[-1]] + \
                                     (self.cfg.loss.w_total_previous * loss['total'])
               
          
             scaler.scale(loss['total']).backward()
-            
-            for name, p in self.model.named_parameters():
-                if p.grad is None:
-                    print("NO GRAD:", name)
 
             if (batch_idx + 1) % self.cfg.dev.grad_steps == 0:
                 scaler.step(self.optimizer)
                 scaler.update()
                 self.optimizer.zero_grad(set_to_none=True)
-            torch.cuda.empty_cache()
+            # TODO: inside loop or each epoch?
+            #torch.cuda.empty_cache()
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
 
-            loss_track_total += loss['disp'].item()
-            avg_loss_track = loss_track_total / (batch_idx + 1)
-            
-            loss_tr_obj += loss['obj_head'].item()
-            avg_loss_tr_obj = loss_tr_obj / (batch_idx + 1)
-
-            pbar.set_postfix({
-                            'loss': f"{avg_loss:.4f}",
-                            'track loss_disp': f"{avg_loss_track:.4f}",
-                            'track_loss_obj': f"{avg_loss_tr_obj:.4f}",
-                            'batch': f"{batch_idx+1}/{len(self.dataloader)}",
-                            })
+            if len(self.cfg.loss.heads) == 1:
+                per_batch_loss = loss['total'].item()
+                pbar.set_postfix({'loss': f"{avg_loss:.5f}",
+                                  'Disp Loss PB:': f"{per_batch_loss:.5f}",
+                                  'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
+            else:
+                
+                avg_loss_track_prev = loss_track_prev / (batch_idx + 1)
+                loss_track_new += loss[self.cfg.loss.heads[-1]].item()
+                avg_loss_track_new = loss_track_new / (batch_idx + 1)
+                new_head_per_batch_loss = loss[self.cfg.loss.heads[-1]].item()
+                pbar.set_postfix({'loss': f"{avg_loss:.3f}",
+                                   f"Avg loss {self.cfg.loss.heads[-1]}": f"{avg_loss_track_new:.4f}",
+                                  'loss prev': f"{avg_loss_track_prev:.3f}",
+                                   f"PB loss {self.cfg.loss.heads[-1]}": f"{new_head_per_batch_loss:.4f}",
+                                  'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
+                
             
         if (batch_idx + 1) % self.cfg.dev.grad_steps != 0:
             scaler.step(self.optimizer)
@@ -171,28 +168,10 @@ class Trainer:
             self.optimizer.zero_grad(set_to_none=True)
             
         self.scheduler.step()
-        
+        # TODO: inside loop or each epoch?
+        torch.cuda.empty_cache()
         avg_epoch_loss = running_loss / len(self.dataloader)
         return avg_epoch_loss
-
-    
-    def save_epoch_log(self, epoch, loss, train_time):
-        log = {
-            'total epoch': self.num_epochs,
-            'start epoch': self.start_epoch,
-            'current epoch': epoch,
-            'loss': loss,
-            'learning rate start': self.cfg.dev.lr,
-            'Weight decay': self.cfg.dev.weight_decay,
-            'T max': self.cfg.dev.t_max,
-            'Eta min': self.cfg.dev.eta_min,
-            'train_time_sec': train_time,
-            'timestamp': time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-        }
-                
-        log_filename = os.path.join(self.log_dir, f'epoch_{epoch}_log.json')
-        with open(log_filename, 'w') as f:
-            json.dump(log, f, indent=4)
     
     def train(self):
         
@@ -227,6 +206,4 @@ class Trainer:
             if os.path.exists(checkpoint_path_prev):
                 print(f"Removing checkpoints of epoch: {epoch - 2} ...")
                 os.remove(checkpoint_path_prev)
-            
-            # Save epoch logs
-            #self.save_epoch_log(epoch, avg_loss, train_time)
+        

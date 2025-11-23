@@ -268,29 +268,6 @@ def img_resize(img, target_size):
     assert final_img.shape[0] == target_size[0] and final_img.shape[1] == target_size[1]
     return final_img, scale, crop, direction
 
-def test_resize(img_path='/home/arash/SeaX3DIMG/dataset/training/image_2/000057.png'):
-    import matplotlib.pyplot as plt
-    import cv2
-
-    img_l = cv2.imread(img_path, cv2.IMREAD_COLOR)
-    img_l = cv2.cvtColor(img_l, cv2.COLOR_BGR2RGB)
-
-    target_sizes = [(200, 1242), (50, 1200), (375, 1000), (300, 300)]
-    imgs, infos = [img_l], ["Original"]
-
-    for tg_size in target_sizes:
-        resized, scale, crop, direction = img_resize(img_l, tg_size)
-        imgs.append(resized)
-        infos.append(f"{tg_size} | scale={scale:.2f} | crop={crop} ({direction})")
-
-    plt.figure(figsize=(18, 4))
-    for i, im in enumerate(imgs):
-        plt.subplot(1, len(imgs), i + 1)
-        plt.imshow(im)
-        plt.title(infos[i], fontsize=9)
-        plt.axis('off')
-    plt.tight_layout()
-    plt.show()
 
 
 def convert_calibration(P, scale, crop, direction):
@@ -313,35 +290,6 @@ def convert_calibration(P, scale, crop, direction):
         P[0,2] -= crop
 
     return torch.from_numpy(P)
-
-def test_calib_transform(target_size = (288, 960),
-                         calib_path = '/home/arash/SeaX3DIMG/dataset/training/calib/000057.txt',
-                         img_path2='/home/arash/SeaX3DIMG/dataset/training/image_2/000057.png',
-                         img_path3='/home/arash/SeaX3DIMG/dataset/training/image_3/000057.png'):
-    
-    P2 = parse_calibration(calib_path)['P2']
-    P3 = parse_calibration(calib_path)['P3']
-    
-    import cv2
-    img_l = cv2.imread(img_path2, cv2.IMREAD_COLOR)
-    img_l = cv2.cvtColor(img_l, cv2.COLOR_BGR2RGB)
-    
-    img_r = cv2.imread(img_path3, cv2.IMREAD_COLOR)
-    img_r = cv2.cvtColor(img_r, cv2.COLOR_BGR2RGB)
-    
-    #print(f"Original P for shape: {np.shape(img_l)} is: ")
-    #print(P)
-    
-    final_img2, scale2, crop2, direction2 = img_resize(img_l, target_size)
-    final_img3, scale3, crop3, direction3 = img_resize(img_r, target_size)
-    
-    P2_conv = convert_calibration(P2, scale2, crop2, direction2)
-    P3_conv = convert_calibration(P3, scale3, crop3, direction3)
-    
-    #print(f"Converted P for shape: {target_size} is: ")
-    #print(P_conv)
-    
-    return P2_conv, P3_conv
 
 
 def img_normalize(img, mean, std):
@@ -489,17 +437,17 @@ def get_focal_baseline(P_l, P_r):
 def collate_fn(batch):
     # a batch is a list
     images_l = torch.stack([item['left_img'] for item in batch])          # [B, 3, H, W]
-    images_l_p = torch.stack([item['left_img_previous'] for item in batch])
+    #images_l_p = torch.stack([item['left_img_previous'] for item in batch])
     images_r = torch.stack([item['right_img'] for item in batch])
-    images_r_p = torch.stack([item['right_img_previous'] for item in batch])
+    #images_r_p = torch.stack([item['right_img_previous'] for item in batch])
     image_id = [item['id'] for item in batch]
     # calib_left = torch.stack([item['calib'] for item in batch], dim=0)  # a 12-value each row of P
     
     batch_dict = {
         "left_img": images_l.to(dtype=torch.float32),
-        "left_img_previous": images_l_p.to(dtype=torch.float32),
+        #"left_img_previous": images_l_p.to(dtype=torch.float32),
         "right_img": images_r.to(dtype=torch.float32),
-        "right_img_previous": images_r_p.to(dtype=torch.float32),
+        #"right_img_previous": images_r_p.to(dtype=torch.float32),
         "id": image_id
         # "calib": calib_left.to(dtype=torch.float32)
     }
