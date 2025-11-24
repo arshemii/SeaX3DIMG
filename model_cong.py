@@ -109,7 +109,7 @@ def config_generator():
     cfg.model.max_disp = 16
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
-    cfg.model.sx3d.use_checkpoint = False
+    cfg.model.sx3d.use_checkpoint = True
     cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/disp45.pth'
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
@@ -224,7 +224,7 @@ def config_generator():
     # Staging:
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
-    cfg.loss.heads = ['disp']
+    cfg.loss.heads = ['disp', 'obj_head']
     cfg.loss.w_total_previous = 0.15
     
 
