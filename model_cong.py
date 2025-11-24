@@ -61,9 +61,9 @@ def config_generator():
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch
     cfg.dev.grad_steps = 4
-    cfg.dev.eta_min = 2e-5 * cfg.dev.grad_steps
+    cfg.dev.eta_min = 1e-5 * cfg.dev.grad_steps
     cfg.dev.mode = 'train'
-    cfg.dev.lr = 4e-5 * cfg.dev.grad_steps
+    cfg.dev.lr = 2e-5 * cfg.dev.grad_steps
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
@@ -185,7 +185,7 @@ def config_generator():
     
     
     cfg.model.back.out = "features"
-    cfg.model.back.init_weight = True
+    cfg.model.back.init_weight = False
     cfg.model.back.extra = [{"INP_SIZE": [288, 960],
                             "HEATMAP_SIZE": [72, 240],
                             "INP_SIZE_SCALE": [1],
