@@ -91,6 +91,8 @@ class Trainer:
                     disp = self.model(batch["left_img"], batch["right_img"])
                 else:
                     outputs, disp = self.model(batch["left_img"], batch["right_img"])
+                    if 'disp' in self.cfg.loss.freezed_output:
+                        del disp
 
                 del batch["left_img"], batch["right_img"]
                 assert "label" in batch.keys()
@@ -99,6 +101,7 @@ class Trainer:
                 if 'disp' in self.heads_for_loss:
                     batch["disparity"] = batch["disparity"].to(self.device)
                     loss['disp'], _ = self.loss_fn.disparity_loss(disp, batch["disparity"])
+                    del disp, batch["disparity"]
                     
                 if 'obj_head' in self.heads_for_loss:
                     batch['assignment'] = batch['assignment'].to(self.device)
@@ -158,8 +161,8 @@ class Trainer:
                 new_head_per_batch_loss = loss[self.cfg.loss.heads[-1]].item()
                 pbar.set_postfix({'loss': f"{avg_loss:.4f}",
                                    f"Avg loss {self.cfg.loss.heads[-1]}": f"{avg_loss_track_new:.4f}",
-                                  'loss prev': f"{avg_loss_track_prev:.4f}",
-                                   f"PB loss {self.cfg.loss.heads[-1]}": f"{new_head_per_batch_loss:.5f}",
+                                  'loss prev': f"{avg_loss_track_prev:.6f}",
+                                   f"PB loss {self.cfg.loss.heads[-1]}": f"{new_head_per_batch_loss:.4f}",
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
                 
             
