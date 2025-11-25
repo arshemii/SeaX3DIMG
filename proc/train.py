@@ -44,7 +44,9 @@ class Trainer:
 
         self.batch_size = self.cfg.num_batch
         self.num_workers = self.cfg.num_worker
-                
+        
+        self.heads_for_loss = [o for o in self.cfg.loss.heads if o not in self.cfg.loss.freezed_output]
+        
         self.checkpoint_dir = self.cfg.model.sx3d.checkpoint_3d
         self.log_dir = self.cfg.log_dir
         os.makedirs(self.checkpoint_dir, exist_ok=True)
@@ -74,7 +76,7 @@ class Trainer:
             loss_track_new = 0.0
             avg_loss_track_new = 0.0
         
-        print(f"Epoch {epoch} using heads: {self.cfg.loss.heads}")
+        print(f"Active heads: {self.cfg.loss.heads}, freezed head: {self.cfg.loss.freezed_output}")
         print("---------------------------------------------------------------")
         #self.optimizer.zero_grad()
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
@@ -94,27 +96,26 @@ class Trainer:
                 assert "label" in batch.keys()
                 
                 loss = {'total': 0.0}
-                if 'disp' in self.cfg.loss.heads:
+                if 'disp' in self.heads_for_loss:
                     batch["disparity"] = batch["disparity"].to(self.device)
                     loss['disp'], _ = self.loss_fn.disparity_loss(disp, batch["disparity"])
-                    del disp, batch["disparity"]
                     
-                if 'obj_head' in self.cfg.loss.heads:
+                if 'obj_head' in self.heads_for_loss:
                     batch['assignment'] = batch['assignment'].to(self.device)
                     loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])
                     
-                if 'cls_head' in self.cfg.loss.heads:
+                if 'cls_head' in self.heads_for_loss:
                     batch["label"] = batch["label"].to(self.device)
                     loss['cls_head'], _ = self.loss_fn.classification_loss(outputs[1], outputs[0],
-                                                                           batch['assignment'], batch["label"])
+                                                                          batch['assignment'], batch["label"])
                 
-                if 'cnt_head' in self.cfg.loss.heads:
+                if 'cnt_head' in self.heads_for_loss:
                     loss['cnt_head'], _ = self.loss_fn.center_loss(outputs[2], batch['assignment'], batch["label"])
 
-                if 'dim_head' in self.cfg.loss.heads:
+                if 'dim_head' in self.heads_for_loss:
                     loss['dim_head'], _ = self.loss_fn.dimension_loss(outputs[3], batch['assignment'], batch["label"])
                     
-                if 'yaw_head' in self.cfg.loss.heads:
+                if 'yaw_head' in self.heads_for_loss:
                     loss['yaw_head'], _ = self.loss_fn.yaw_loss(outputs[4], batch['assignment'], batch["label"])
                     
                 
@@ -124,11 +125,11 @@ class Trainer:
                     loss['total'] = loss['disp']
                 else:
                     del outputs
-                    for loss_t in self.cfg.loss.heads[:-1]:
+                    for loss_t in self.heads_for_loss[:-1]:
                         loss['total'] += loss[loss_t]
 
                     loss_track_prev += loss['total'].item()
-                    loss['total'] = loss[self.cfg.loss.heads[-1]] + \
+                    loss['total'] = loss[self.heads_for_loss[-1]] + \
                                     (self.cfg.loss.w_total_previous * loss['total'])
               
          
@@ -155,10 +156,10 @@ class Trainer:
                 loss_track_new += loss[self.cfg.loss.heads[-1]].item()
                 avg_loss_track_new = loss_track_new / (batch_idx + 1)
                 new_head_per_batch_loss = loss[self.cfg.loss.heads[-1]].item()
-                pbar.set_postfix({'loss': f"{avg_loss:.3f}",
+                pbar.set_postfix({'loss': f"{avg_loss:.4f}",
                                    f"Avg loss {self.cfg.loss.heads[-1]}": f"{avg_loss_track_new:.4f}",
-                                  'loss prev': f"{avg_loss_track_prev:.3f}",
-                                   f"PB loss {self.cfg.loss.heads[-1]}": f"{new_head_per_batch_loss:.4f}",
+                                  'loss prev': f"{avg_loss_track_prev:.4f}",
+                                   f"PB loss {self.cfg.loss.heads[-1]}": f"{new_head_per_batch_loss:.5f}",
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
                 
             
@@ -181,7 +182,7 @@ class Trainer:
         print(f" Grid resolution :          {self.cfg.grid_resolution}")
         print(f" Input image size:          {self.cfg.model.in_size}")
         print(f" Backbone       :           {self.cfg.model.back.name}")
-        print("="*60 + "\n")
+        print("-"*60 + "\n")
         for epoch in range(self.start_epoch, self.start_epoch + self.num_epochs):
             start_time = time.time()
             

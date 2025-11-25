@@ -221,6 +221,12 @@ def get_SX3D_model(cfg, is_train=True):
     # Always try to load full model checkpoint if provided
     if cfg.model.sx3d.use_checkpoint and cfg.model.sx3d.checkpoint_exp:
         load_weights_from_checkpoint(model, cfg.model.sx3d.checkpoint_exp, cfg.device[0])
+        
+        if cfg.loss.freeze:
+            print("No grad for frozen layers ...")
+            if 'disp' in cfg.loss.freezed_output:
+                for p in model.hrnet_disp.parameters():
+                    p.requires_grad = False
     
     return model
     

@@ -57,7 +57,11 @@ def training(cfg):
     model = get_SX3D_model(cfg)
     model.to(device)
     model.train()
-    
+    if cfg.loss.freeze:
+        if 'disp' in cfg.loss.freezed_output:
+            print("Freezing disparity generator ...")
+            model.hrnet_disp.eval()
+    print("Model is initialized completely ...")
          
     optimizer = torch.optim.AdamW(model.parameters(),
                                   lr = cfg.dev.lr, weight_decay = cfg.dev.weight_decay)
