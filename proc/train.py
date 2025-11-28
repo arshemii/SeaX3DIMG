@@ -208,6 +208,6 @@ class Trainer:
             
             checkpoint_path_prev = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch-2}.pth')
             if os.path.exists(checkpoint_path_prev):
-                print(f"Removing checkpoints of epoch: {epoch - 2} ...")
+                print(f"Removing checkpoints of epoch: {epoch - 4} ...")
                 os.remove(checkpoint_path_prev)
         

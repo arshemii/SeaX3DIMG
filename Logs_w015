@@ -1,0 +1,205 @@
+Device 0 name: NVIDIA GeForce RTX 3060 Laptop GPU
+  Total memory (GB): 5.67
+  Multiprocessors (SMs): 30
+  CUDA capability: 8 . 6
+Preparing dataset ...
+Preparing the model ...
+The head is initialized with disparity + other outputs!
+/home/arash/SeaX3DIMG/SX3DIMG.py:203: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  ckpt = torch.load(checkpoint_path, map_location=device)
+The provided checkpoint does have model_state key !
+==> Loaded whole SX3D model checkpoint from: ./checkpoints_exp/staged_training/disp_obj45.pth
+No grad for frozen layers ...
+Freezing disparity generator ...
+Model is initialized completely ...
+Training initialized and scheduled with CosineAnnealingLR
+T max is: 45, LR is: 8e-05, LR min is: 7.2e-05, Weight decay is: 0.0001
+
+============================================================
+  ------------------------Training Started ------------------------  
+============================================================
+ Grid resolution :          (68, 20, 128)
+ Input image size:          (288, 960)
+ Backbone       :           hrnet-w48
+------------------------------------------------------------
+
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 0:   0%|                                                                                                                                                                            | 0/3705 [00:00<?, ?it/s]/home/arash/miniconda3/lib/python3.10/site-packages/torch/functional.py:534: UserWarning: torch.meshgrid: in an upcoming release, it will be required to pass the indexing argument. (Triggered internally at ../aten/src/ATen/native/TensorShape.cpp:3595.)
+  return _VF.meshgrid(tensors, **kwargs)  # type: ignore[attr-defined]
+Epoch 0: 100%|████████████████████████████████████████████████████████████| 3705/3705 [22:36<00:00,  2.73it/s, loss=0.0319, Avg loss cls_head=0.0306, loss prev=0.009122, PB loss cls_head=0.0072, batch=3705/3705]
+Training epoch 0 with loss 0.03 in 1357.23
+Saving checkpoints of epoch: 0 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 1: 100%|████████████████████████████████████████████████████████████| 3705/3705 [22:31<00:00,  2.74it/s, loss=0.0188, Avg loss cls_head=0.0184, loss prev=0.002927, PB loss cls_head=0.0278, batch=3705/3705]
+Training epoch 1 with loss 0.02 in 1351.40
+Saving checkpoints of epoch: 1 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 2: 100%|████████████████████████████████████████████████████████████| 3705/3705 [22:27<00:00,  2.75it/s, loss=0.0171, Avg loss cls_head=0.0169, loss prev=0.001553, PB loss cls_head=0.0302, batch=3705/3705]
+Training epoch 2 with loss 0.02 in 1348.04
+Saving checkpoints of epoch: 2 ...
+Removing checkpoints of epoch: 0 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 3: 100%|████████████████████████████████████████████████████████████| 3705/3705 [22:24<00:00,  2.76it/s, loss=0.0176, Avg loss cls_head=0.0175, loss prev=0.001206, PB loss cls_head=0.0196, batch=3705/3705]
+Training epoch 3 with loss 0.02 in 1344.25
+Saving checkpoints of epoch: 3 ...
+Removing checkpoints of epoch: 1 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 4: 100%|████████████████████████████████████████████████████████████| 3705/3705 [22:20<00:00,  2.76it/s, loss=0.0188, Avg loss cls_head=0.0187, loss prev=0.001081, PB loss cls_head=0.0280, batch=3705/3705]
+Training epoch 4 with loss 0.02 in 1341.22
+Saving checkpoints of epoch: 4 ...
+Removing checkpoints of epoch: 2 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 5: 100%|████████████████████████████████████████████████████████████| 3705/3705 [22:20<00:00,  2.76it/s, loss=0.0239, Avg loss cls_head=0.0237, loss prev=0.001241, PB loss cls_head=0.0391, batch=3705/3705]
+Training epoch 5 with loss 0.02 in 1340.28
+Saving checkpoints of epoch: 5 ...
+Removing checkpoints of epoch: 3 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 6: 100%|████████████████████████████████████████████████████████████| 3705/3705 [22:18<00:00,  2.77it/s, loss=0.0266, Avg loss cls_head=0.0263, loss prev=0.001437, PB loss cls_head=0.0281, batch=3705/3705]
+Training epoch 6 with loss 0.03 in 1338.96
+Saving checkpoints of epoch: 6 ...
+Removing checkpoints of epoch: 4 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 7: 100%|████████████████████████████████████████████████████████████| 3705/3705 [22:17<00:00,  2.77it/s, loss=0.0237, Avg loss cls_head=0.0234, loss prev=0.002167, PB loss cls_head=0.0001, batch=3705/3705]
+Training epoch 7 with loss 0.02 in 1337.65
+Saving checkpoints of epoch: 7 ...
+Removing checkpoints of epoch: 5 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 8: 100%|████████████████████████████████████████████████████████████| 3705/3705 [22:16<00:00,  2.77it/s, loss=0.0151, Avg loss cls_head=0.0146, loss prev=0.002939, PB loss cls_head=0.0105, batch=3705/3705]
+Training epoch 8 with loss 0.02 in 1336.27
+Saving checkpoints of epoch: 8 ...
+Removing checkpoints of epoch: 6 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 9: 100%|████████████████████████████████████████████████████████████| 3705/3705 [22:14<00:00,  2.78it/s, loss=0.0081, Avg loss cls_head=0.0077, loss prev=0.002967, PB loss cls_head=0.0006, batch=3705/3705]
+Training epoch 9 with loss 0.01 in 1334.46
+Saving checkpoints of epoch: 9 ...
+Removing checkpoints of epoch: 7 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 10: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:13<00:00,  2.78it/s, loss=0.0050, Avg loss cls_head=0.0046, loss prev=0.002654, PB loss cls_head=0.0004, batch=3705/3705]
+Training epoch 10 with loss 0.01 in 1333.39
+Saving checkpoints of epoch: 10 ...
+Removing checkpoints of epoch: 8 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 11: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:14<00:00,  2.78it/s, loss=0.0054, Avg loss cls_head=0.0050, loss prev=0.002747, PB loss cls_head=0.0001, batch=3705/3705]
+Training epoch 11 with loss 0.01 in 1334.41
+Saving checkpoints of epoch: 11 ...
+Removing checkpoints of epoch: 9 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 12: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:13<00:00,  2.78it/s, loss=0.0048, Avg loss cls_head=0.0044, loss prev=0.002877, PB loss cls_head=0.0003, batch=3705/3705]
+Training epoch 12 with loss 0.00 in 1334.04
+Saving checkpoints of epoch: 12 ...
+Removing checkpoints of epoch: 10 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 13: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:13<00:00,  2.78it/s, loss=0.0053, Avg loss cls_head=0.0049, loss prev=0.003034, PB loss cls_head=0.0019, batch=3705/3705]
+Training epoch 13 with loss 0.01 in 1334.00
+Saving checkpoints of epoch: 13 ...
+Removing checkpoints of epoch: 11 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 14: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:13<00:00,  2.78it/s, loss=0.0034, Avg loss cls_head=0.0030, loss prev=0.003200, PB loss cls_head=0.0001, batch=3705/3705]
+Training epoch 14 with loss 0.00 in 1334.01
+Saving checkpoints of epoch: 14 ...
+Removing checkpoints of epoch: 12 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 15: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:12<00:00,  2.78it/s, loss=0.0049, Avg loss cls_head=0.0045, loss prev=0.002692, PB loss cls_head=0.0014, batch=3705/3705]
+Training epoch 15 with loss 0.00 in 1332.93
+Saving checkpoints of epoch: 15 ...
+Removing checkpoints of epoch: 13 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 16: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:14<00:00,  2.78it/s, loss=0.0090, Avg loss cls_head=0.0085, loss prev=0.003212, PB loss cls_head=0.0137, batch=3705/3705]
+Training epoch 16 with loss 0.01 in 1334.67
+Saving checkpoints of epoch: 16 ...
+Removing checkpoints of epoch: 14 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 17: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:12<00:00,  2.78it/s, loss=0.0059, Avg loss cls_head=0.0054, loss prev=0.003177, PB loss cls_head=0.0001, batch=3705/3705]
+Training epoch 17 with loss 0.01 in 1332.50
+Saving checkpoints of epoch: 17 ...
+Removing checkpoints of epoch: 15 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 18: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:14<00:00,  2.78it/s, loss=0.0039, Avg loss cls_head=0.0035, loss prev=0.002925, PB loss cls_head=0.0001, batch=3705/3705]
+Training epoch 18 with loss 0.00 in 1334.27
+Saving checkpoints of epoch: 18 ...
+Removing checkpoints of epoch: 16 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 19: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:11<00:00,  2.78it/s, loss=0.0043, Avg loss cls_head=0.0038, loss prev=0.002874, PB loss cls_head=0.0000, batch=3705/3705]
+Training epoch 19 with loss 0.00 in 1331.33
+Saving checkpoints of epoch: 19 ...
+Removing checkpoints of epoch: 17 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 20: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:12<00:00,  2.78it/s, loss=0.0052, Avg loss cls_head=0.0047, loss prev=0.003117, PB loss cls_head=0.0004, batch=3705/3705]
+Training epoch 20 with loss 0.01 in 1332.88
+Saving checkpoints of epoch: 20 ...
+Removing checkpoints of epoch: 18 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 21: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:12<00:00,  2.78it/s, loss=0.0039, Avg loss cls_head=0.0034, loss prev=0.003064, PB loss cls_head=0.0000, batch=3705/3705]
+Training epoch 21 with loss 0.00 in 1332.37
+Saving checkpoints of epoch: 21 ...
+Removing checkpoints of epoch: 19 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 22: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:12<00:00,  2.78it/s, loss=0.0053, Avg loss cls_head=0.0048, loss prev=0.003301, PB loss cls_head=0.0001, batch=3705/3705]
+Training epoch 22 with loss 0.01 in 1332.42
+Saving checkpoints of epoch: 22 ...
+Removing checkpoints of epoch: 20 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 23: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:10<00:00,  2.78it/s, loss=0.0031, Avg loss cls_head=0.0027, loss prev=0.003068, PB loss cls_head=0.0001, batch=3705/3705]
+Training epoch 23 with loss 0.00 in 1330.78
+Saving checkpoints of epoch: 23 ...
+Removing checkpoints of epoch: 21 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 24: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:11<00:00,  2.78it/s, loss=0.0076, Avg loss cls_head=0.0071, loss prev=0.003536, PB loss cls_head=0.0003, batch=3705/3705]
+Training epoch 24 with loss 0.01 in 1332.00
+Saving checkpoints of epoch: 24 ...
+Removing checkpoints of epoch: 22 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 25: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:10<00:00,  2.78it/s, loss=0.0071, Avg loss cls_head=0.0065, loss prev=0.003546, PB loss cls_head=0.0011, batch=3705/3705]
+Training epoch 25 with loss 0.01 in 1330.73
+Saving checkpoints of epoch: 25 ...
+Removing checkpoints of epoch: 23 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 26: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:11<00:00,  2.78it/s, loss=0.0037, Avg loss cls_head=0.0032, loss prev=0.002992, PB loss cls_head=0.0270, batch=3705/3705]
+Training epoch 26 with loss 0.00 in 1331.56
+Saving checkpoints of epoch: 26 ...
+Removing checkpoints of epoch: 24 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 27: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:11<00:00,  2.78it/s, loss=0.0062, Avg loss cls_head=0.0057, loss prev=0.003386, PB loss cls_head=0.0001, batch=3705/3705]
+Training epoch 27 with loss 0.01 in 1331.37
+Saving checkpoints of epoch: 27 ...
+Removing checkpoints of epoch: 25 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 28: 100%|███████████████████████████████████████████████████████████| 3705/3705 [22:11<00:00,  2.78it/s, loss=0.0040, Avg loss cls_head=0.0034, loss prev=0.004109, PB loss cls_head=0.0002, batch=3705/3705]
+Training epoch 28 with loss 0.00 in 1331.93
+Saving checkpoints of epoch: 28 ...
+Removing checkpoints of epoch: 26 ...
+Active heads: ['disp', 'obj_head', 'cls_head'], freezed head: ['disp']
+---------------------------------------------------------------
+Epoch 29:  49%|████████████████████████████▋                              | 1799/3705 [10:46<11:18,  2.81it/s, loss=0.0063, Avg loss cls_head=0.0057, loss prev=0.003790, PB loss cls_head=0.0002, batch=1799/3705]Epoch 29:  49%|████████████████████████████▋                              | 1799/3705 [10:46<11:24,  2.78it/s, loss=0.0063, Avg loss cls_head=0.0057, loss prev=0.003790, PB loss cls_head=0.0002, batch=1799/3705]
+Traceback (most recent call last):
+  File "/home/arash/SeaX3DIMG/main.py", line 116, in <module>
+
