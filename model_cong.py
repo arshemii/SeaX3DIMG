@@ -225,7 +225,9 @@ def config_generator():
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
     cfg.loss.heads = ['disp', 'obj_head', 'cls_head']
-    cfg.loss.w_total_previous = 0.55
+    cfg.loss.w_total_previous = 0.10
+    cfg.loss.w_total_previous_raise = 0.20
+    cfg.loss.warm_epochs = 10
     cfg.loss.freeze = True
     cfg.loss.freezed_output = ['disp']
     

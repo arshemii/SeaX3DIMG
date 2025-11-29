@@ -79,7 +79,15 @@ class Trainer:
         print(f"Active heads: {self.cfg.loss.heads}, freezed head: {self.cfg.loss.freezed_output}")
         print("---------------------------------------------------------------")
         #self.optimizer.zero_grad()
-        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch}")
+        
+        if epoch < self.cfg.loss.warm_epochs:
+            w_prev = self.cfg.loss.w_total_previous
+        else:
+            eff_epoch = epoch - self.cfg.loss.warm_epochs
+            w_prev = self.cfg.loss.w_total_previous + \
+                (eff_epoch * self.cfg.loss.w_total_previous_raise / self.cfg.dev.num_epoch)
+        
+        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch} with w: {w_prev}")
         
         for batch_idx, batch in pbar:
                         
@@ -133,7 +141,7 @@ class Trainer:
 
                     loss_track_prev += loss['total'].item()
                     loss['total'] = loss[self.heads_for_loss[-1]] + \
-                                    (self.cfg.loss.w_total_previous * loss['total'])
+                                    (w_prev * loss['total'])
               
          
             scaler.scale(loss['total']).backward()
@@ -206,7 +214,7 @@ class Trainer:
                 'optimizer_state': self.optimizer.state_dict()
             }, checkpoint_path)
             
-            checkpoint_path_prev = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch-2}.pth')
+            checkpoint_path_prev = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch-4}.pth')
             if os.path.exists(checkpoint_path_prev):
                 print(f"Removing checkpoints of epoch: {epoch - 4} ...")
                 os.remove(checkpoint_path_prev)
