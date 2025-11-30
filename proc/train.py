@@ -71,23 +71,22 @@ class Trainer:
         avg_loss = 0.0
         
         if len(self.cfg.loss.heads) > 1:
-            loss_track_prev = 0.0
-            avg_loss_track_prev = 0.0
-            loss_track_new = 0.0
-            avg_loss_track_new = 0.0
+            loss_track_obj = 0.0
+            avg_loss_track_obj = 0.0
+            loss_track_cls = 0.0
+            avg_loss_track_cls = 0.0
+            loss_track_cnt = 0.0
+            avg_loss_track_cnt = 0.0
         
-        print(f"Active heads: {self.cfg.loss.heads}, freezed head: {self.cfg.loss.freezed_output}")
+        print(f"Active: {self.cfg.loss.heads}, freezed: {self.cfg.loss.freezed_output}")
         print("---------------------------------------------------------------")
-        #self.optimizer.zero_grad()
         
-        if epoch < self.cfg.loss.warm_epochs:
-            w_prev = self.cfg.loss.w_total_previous
-        else:
-            eff_epoch = epoch - self.cfg.loss.warm_epochs
-            w_prev = self.cfg.loss.w_total_previous + \
-                (eff_epoch * self.cfg.loss.w_total_previous_raise / self.cfg.dev.num_epoch)
+        w_prev = [self.cfg.loss.w_total_previous[0],
+                  self.cfg.loss.w_total_previous[1]]    # objecness, classification
+        w_center = self.cfg.loss.w_center
+
         
-        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Epoch {epoch} with w: {w_prev}")
+        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Stage 4, Epoch {epoch}")
         
         for batch_idx, batch in pbar:
                         
@@ -132,16 +131,15 @@ class Trainer:
                 
                 del batch["label"], batch['assignment']
                                     
-                if len(self.cfg.loss.heads[1:]) == 0:
+                if self.cfg.loss.heads == ['disp']:
                     loss['total'] = loss['disp']
                 else:
                     del outputs
-                    for loss_t in self.heads_for_loss[:-1]:
-                        loss['total'] += loss[loss_t]
+                    for idx, loss_t in enumerate(self.heads_for_loss[:-1]):
+                        loss['total'] += (w_prev[idx] * loss[loss_t])
 
-                    loss_track_prev += loss['total'].item()
-                    loss['total'] = loss[self.heads_for_loss[-1]] + \
-                                    (w_prev * loss['total'])
+                    loss['total'] = loss['total'] + \
+                                    (w_center * loss[self.heads_for_loss[-1]])
               
          
             scaler.scale(loss['total']).backward()
@@ -150,8 +148,6 @@ class Trainer:
                 scaler.step(self.optimizer)
                 scaler.update()
                 self.optimizer.zero_grad(set_to_none=True)
-            # TODO: inside loop or each epoch?
-            #torch.cuda.empty_cache()
             
             running_loss += loss['total'].item()
             avg_loss = running_loss / (batch_idx + 1)
@@ -162,15 +158,16 @@ class Trainer:
                                   'Disp Loss PB:': f"{per_batch_loss:.5f}",
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
             else:
-                
-                avg_loss_track_prev = loss_track_prev / (batch_idx + 1)
-                loss_track_new += loss[self.cfg.loss.heads[-1]].item()
-                avg_loss_track_new = loss_track_new / (batch_idx + 1)
-                new_head_per_batch_loss = loss[self.cfg.loss.heads[-1]].item()
+                loss_track_obj += loss['obj_head'].item()
+                loss_track_cnt += loss['cnt_head'].item()
+                loss_track_cls += loss['cls_head'].item()
+                avg_loss_track_cnt = loss_track_cnt / (batch_idx + 1)
+                avg_loss_track_obj = loss_track_obj / (batch_idx + 1)
+                avg_loss_track_cls = loss_track_cls / (batch_idx + 1)
                 pbar.set_postfix({'loss': f"{avg_loss:.4f}",
-                                   f"Avg loss {self.cfg.loss.heads[-1]}": f"{avg_loss_track_new:.4f}",
-                                  'loss prev': f"{avg_loss_track_prev:.6f}",
-                                   f"PB loss {self.cfg.loss.heads[-1]}": f"{new_head_per_batch_loss:.4f}",
+                                  'Center offset loss': f"{avg_loss_track_cnt:.5f}",
+                                  'Classification loss': f"{avg_loss_track_cls:.5f}",
+                                  'Objecness loss': f"{avg_loss_track_obj:.5f}",
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
                 
             
