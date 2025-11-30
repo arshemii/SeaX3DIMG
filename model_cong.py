@@ -61,9 +61,9 @@ def config_generator():
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch
     cfg.dev.grad_steps = 8
-    cfg.dev.eta_min = 9.5e-6 * cfg.dev.grad_steps # first setup 9e-6
+    cfg.dev.eta_min = 9e-6 * cfg.dev.grad_steps # first setup 9e-6
     cfg.dev.mode = 'train'
-    cfg.dev.lr = 1.3e-5 * cfg.dev.grad_steps # first setup 1e-5
+    cfg.dev.lr = 1e-5 * cfg.dev.grad_steps # first setup 1e-5
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
@@ -225,7 +225,7 @@ def config_generator():
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
     cfg.loss.heads = ['disp', 'obj_head', 'cls_head']
-    cfg.loss.w_total_previous = 0.12  # main experiment with 0.15
+    cfg.loss.w_total_previous = 0.15  # main experiment with 0.15
     cfg.loss.w_total_previous_raise = 0.00
     cfg.loss.warm_epochs = cfg.dev.num_epoch
     cfg.loss.freeze = True
