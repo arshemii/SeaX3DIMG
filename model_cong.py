@@ -110,7 +110,7 @@ def config_generator():
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
     cfg.model.sx3d.use_checkpoint = True
-    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/disp_obj_cls45.pth'
+    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/disp_obj_cls_dim45.pth'
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
     
@@ -226,7 +226,7 @@ def config_generator():
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
     cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head']
     cfg.loss.w_total_previous = [0.02, 0.05, 0.20]  # main experiment with 0.15, [0.05, 0.10]
-    cfg.loss.w_center = 1.0
+    cfg.loss.w_dim = 1.0
     cfg.loss.freeze = True
     cfg.loss.freezed_output = ['disp']
     
