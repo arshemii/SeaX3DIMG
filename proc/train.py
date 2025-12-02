@@ -82,8 +82,9 @@ class Trainer:
         print("---------------------------------------------------------------")
         
         w_prev = [self.cfg.loss.w_total_previous[0],
-                  self.cfg.loss.w_total_previous[1]]    # objecness, classification
-        w_center = self.cfg.loss.w_center
+                  self.cfg.loss.w_total_previous[1],
+                  self.cfg.loss.w_total_previous[2]]    # objecness, classification
+        w_dim = self.cfg.loss.w_dim
 
         
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Stage 4, Epoch {epoch}")
@@ -139,7 +140,7 @@ class Trainer:
                         loss['total'] += (w_prev[idx] * loss[loss_t])
 
                     loss['total'] = loss['total'] + \
-                                    (w_center * loss[self.heads_for_loss[-1]])
+                                    (w_dim * loss[self.heads_for_loss[-1]])
               
          
             scaler.scale(loss['total']).backward()
@@ -161,13 +162,16 @@ class Trainer:
                 loss_track_obj += loss['obj_head'].item()
                 loss_track_cnt += loss['cnt_head'].item()
                 loss_track_cls += loss['cls_head'].item()
+                loss_track_dim += loss['dim_head'].item()
                 avg_loss_track_cnt = loss_track_cnt / (batch_idx + 1)
                 avg_loss_track_obj = loss_track_obj / (batch_idx + 1)
                 avg_loss_track_cls = loss_track_cls / (batch_idx + 1)
+                avg_loss_track_dim = loss_track_dim / (batch_idx + 1)
                 pbar.set_postfix({'loss': f"{avg_loss:.4f}",
-                                  'Center offset loss': f"{avg_loss_track_cnt:.5f}",
-                                  'Classification loss': f"{avg_loss_track_cls:.5f}",
-                                  'Objecness loss': f"{avg_loss_track_obj:.5f}",
+                                  'Dim loss': f"{avg_loss_track_dim:.5f}",
+                                  'Center loss': f"{avg_loss_track_cnt:.5f}",
+                                  'Class loss': f"{avg_loss_track_cls:.5f}",
+                                  'Obj loss': f"{avg_loss_track_obj:.5f}",
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
                 
             
