@@ -77,17 +77,19 @@ class Trainer:
             avg_loss_track_cls = 0.0
             loss_track_cnt = 0.0
             avg_loss_track_cnt = 0.0
+            loss_track_dim = 0.0
+            avg_loss_track_dim = 0.0
         
         print(f"Active: {self.cfg.loss.heads}, freezed: {self.cfg.loss.freezed_output}")
         print("---------------------------------------------------------------")
         
         w_prev = [self.cfg.loss.w_total_previous[0],
                   self.cfg.loss.w_total_previous[1],
-                  self.cfg.loss.w_total_previous[2]]    # objecness, classification
+                  self.cfg.loss.w_total_previous[2]]    # objecness, classification, center
         w_dim = self.cfg.loss.w_dim
 
         
-        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Stage 4, Epoch {epoch}")
+        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Stage 5, Epoch {epoch}")
         
         for batch_idx, batch in pbar:
                         
