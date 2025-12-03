@@ -250,7 +250,7 @@ class loss3d(nn.Module):
         """
         loss_terms = []
         count = 0
-        for b in range(pred_yaw.shape[0])
+        for b in range(pred_yaw.shape[0]):
             valid_mask = (assignments[b] >= 0)
             
             if not valid_mask.any():
