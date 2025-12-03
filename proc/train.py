@@ -79,17 +79,21 @@ class Trainer:
             avg_loss_track_cnt = 0.0
             loss_track_dim = 0.0
             avg_loss_track_dim = 0.0
+            loss_track_yaw = 0.0
+            avg_loss_track_yaw = 0.0
         
         print(f"Active: {self.cfg.loss.heads}, freezed: {self.cfg.loss.freezed_output}")
+        print("From stage 5, the losses are: Dim: 0.00084, Center: 0.10376, Class: 0.00652, Obj: 0.00028")
         print("---------------------------------------------------------------")
         
         w_prev = [self.cfg.loss.w_total_previous[0],
                   self.cfg.loss.w_total_previous[1],
-                  self.cfg.loss.w_total_previous[2]]    # objecness, classification, center
-        w_dim = self.cfg.loss.w_dim
+                  self.cfg.loss.w_total_previous[2],
+                  self.cfg.loss.w_total_previous[3]]    # objecness, classification, center, dim
+        w_yaw = self.cfg.loss.w_yaw
 
         
-        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Stage 5, Epoch {epoch}")
+        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Stage 6, Epoch {epoch}")
         
         for batch_idx, batch in pbar:
                         
@@ -142,7 +146,7 @@ class Trainer:
                         loss['total'] += (w_prev[idx] * loss[loss_t])
 
                     loss['total'] = loss['total'] + \
-                                    (w_dim * loss[self.heads_for_loss[-1]])
+                                    (w_yaw * loss[self.heads_for_loss[-1]])
               
          
             scaler.scale(loss['total']).backward()
@@ -165,11 +169,14 @@ class Trainer:
                 loss_track_cnt += loss['cnt_head'].item()
                 loss_track_cls += loss['cls_head'].item()
                 loss_track_dim += loss['dim_head'].item()
+                loss_track_yaw += loss['yaw_head'].item()
                 avg_loss_track_cnt = loss_track_cnt / (batch_idx + 1)
                 avg_loss_track_obj = loss_track_obj / (batch_idx + 1)
                 avg_loss_track_cls = loss_track_cls / (batch_idx + 1)
                 avg_loss_track_dim = loss_track_dim / (batch_idx + 1)
+                avg_loss_track_yaw = loss_track_yaw / (batch_idx + 1)
                 pbar.set_postfix({'loss': f"{avg_loss:.4f}",
+                		  'Yaw loss': f"{avg_loss_track_yaw:.5f}",
                                   'Dim loss': f"{avg_loss_track_dim:.5f}",
                                   'Center loss': f"{avg_loss_track_cnt:.5f}",
                                   'Class loss': f"{avg_loss_track_cls:.5f}",
@@ -217,8 +224,8 @@ class Trainer:
                 'optimizer_state': self.optimizer.state_dict()
             }, checkpoint_path)
             
-            checkpoint_path_prev = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch-4}.pth')
+            checkpoint_path_prev = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch-3}.pth')
             if os.path.exists(checkpoint_path_prev):
-                print(f"Removing checkpoints of epoch: {epoch - 4} ...")
+                print(f"Removing checkpoints of epoch: {epoch - 3} ...")
                 os.remove(checkpoint_path_prev)
         
