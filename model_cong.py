@@ -58,7 +58,8 @@ def config_generator():
     cfg.test.local_maxima_kernel = 9
     
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
-    cfg.dev.num_epoch = 45
+    #cfg.dev.num_epoch = 45
+    cfg.dev.num_epoch = 9
     cfg.dev.t_max = cfg.dev.num_epoch
     cfg.dev.grad_steps = 8
     cfg.dev.eta_min = 7e-6 * cfg.dev.grad_steps # first setup 9e-6
@@ -110,7 +111,7 @@ def config_generator():
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
     cfg.model.sx3d.use_checkpoint = True
-    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/disp_obj_cls_cnt_dim45.pth'
+    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/stage6exp1.pth'
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
     
@@ -225,8 +226,8 @@ def config_generator():
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
     cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
-    cfg.loss.w_total_previous = [0.02, 0.02, 0.05, 0.15]  # main experiment with 0.15, [0.05, 0.10], [0.02, 0.05, 0.20]
-    cfg.loss.w_yaw = 1.0
+    cfg.loss.w_total_previous = [0.08, 0.08, 0.05, 0.10]  # main experiment with 0.15, [0.05, 0.10], [0.02, 0.05, 0.20],  [0.02, 0.02, 0.05, 0.15]
+    cfg.loss.w_yaw = 0.90
     cfg.loss.freeze = True
     cfg.loss.freezed_output = ['disp']
     

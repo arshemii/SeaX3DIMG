@@ -224,8 +224,8 @@ class Trainer:
                 'optimizer_state': self.optimizer.state_dict()
             }, checkpoint_path)
             
-            checkpoint_path_prev = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch-3}.pth')
+            checkpoint_path_prev = os.path.join(self.checkpoint_dir, f'checkpoint_epoch_{epoch-7}.pth')
             if os.path.exists(checkpoint_path_prev):
-                print(f"Removing checkpoints of epoch: {epoch - 3} ...")
+                print(f"Removing checkpoints of epoch: {epoch - 7} ...")
                 os.remove(checkpoint_path_prev)
         
