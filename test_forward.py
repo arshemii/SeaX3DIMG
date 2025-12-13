@@ -70,9 +70,9 @@ def tensor_to_image(tensor, mean, std):
 
 def test_forward(cfg, dataloader, model):
 
-    import random
+    #import random
 
-    batch = random.choice(list(dataloader))
+    batch = next(iter(dataloader))
 
     
     with torch.no_grad():
@@ -82,7 +82,7 @@ def test_forward(cfg, dataloader, model):
         #batch["right_img_previous"] = batch["right_img_previous"].to(cfg.device[0])
                         
         #temporal_l = model(batch["left_img_previous"], batch["right_img_previous"], None, True)
-        outputs = model(batch["left_img"], batch["right_img"], None, False)
+        outputs = model(batch["left_img"], batch["right_img"])
         
     obj_out = outputs[0]
     # disparity = outputs[1].detach().cpu()
@@ -242,7 +242,7 @@ def draw_bboxes(W, Z, boxes, title="", voxel_size=(0.62, 0.70)):
 cfg = check_env()
 dataset = kitti_sx3d(cfg)
 
-latest_ckpt = 'checkpoints_3d/checkpoint_epoch_44.pth'
+latest_ckpt = './checkpoints_exp/staged_training/fullhead.pth'
     
 model = get_SX3D_model(cfg)
 model = model.to(cfg.device[0])
@@ -254,7 +254,7 @@ dataloader = DataLoader(dataset, batch_size=1, shuffle=True,
                                  collate_fn=collate_fn, num_workers=cfg.num_worker)
 
 output, img, ids, gtl = test_forward(cfg, dataloader, model)
-obj, dims, offset, classes, yaw = output
+obj, classes, offset, dims, yaw = output
 
 scores = F.sigmoid(obj).to('cpu')
 probs = F.softmax(classes, dim=1).to('cpu')
