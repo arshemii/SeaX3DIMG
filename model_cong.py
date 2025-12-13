@@ -54,7 +54,7 @@ def config_generator():
     cfg.test = CN()
     
     
-    cfg.test.score_th = 0.35
+    cfg.test.score_th = 0.20
     cfg.test.local_maxima_kernel = 9
     
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
@@ -111,7 +111,7 @@ def config_generator():
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
     cfg.model.sx3d.use_checkpoint = True
-    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/stage6exp1.pth'
+    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/fullhead.pth'
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
     
