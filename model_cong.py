@@ -54,9 +54,6 @@ def config_generator():
     cfg.test = CN()
     
     
-    cfg.test.score_th = 0.20
-    cfg.test.local_maxima_kernel = 9
-    
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
     #cfg.dev.num_epoch = 45
     cfg.dev.num_epoch = 9
@@ -244,19 +241,18 @@ def config_generator():
     
 
     cfg.eval.save_dir = './eval_dir/'
-    cfg.eval.debug = False
-    cfg.eval.iou_list = [0.10, 0.25, 0.50, 0.75, 0.90]
-    cfg.eval.objectness_threshold = 0.5
-    cfg.eval.range_limit = False
-    cfg.eval.range = 0
-    if cfg.eval.range_limit:
-        assert cfg.eval.range <= cfg.grid_size[2]
-    
-    cfg.eval.eval_device = [torch.device('cpu')]
+    cfg.eval.save_dir_gt = './eval_dir_gt/'
+    cfg.eval.score_th = 0.20
+    cfg.eval.batch_size = 4
+    cfg.eval.num_workers = 4
+    cfg.eval.topk = 13
+    cfg.eval.local_maxima_kernel = 9
+    cfg.eval.estimate_2d = True
     cfg.eval.cl0 = "Car, Van"
     cfg.eval.cl1 = "Truck"
     cfg.eval.cl2 = "Pedestrian"
     cfg.eval.cl3 = "Cyclist"
+    cfg.eval.class_names = ["Car", "Truck", "Person", "Cyclist"]
     
     return cfg
 

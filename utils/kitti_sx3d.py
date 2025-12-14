@@ -99,8 +99,7 @@ class kitti_sx3d(Dataset):
             data["assignment"] = instance["ass"]
             data["center_voxel"] = instance["c_vox"]
             data["valid_obj"] = instance["valid_obj"]
-            # if self.cfg.model.head == 'bev_box':
-                # data["assignment_bev"] = instance["ass_bev"]
+            data["label_path"] = instance['label_path']
         
         return data
         

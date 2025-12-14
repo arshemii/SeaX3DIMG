@@ -442,13 +442,17 @@ def collate_fn(batch):
     #images_r_p = torch.stack([item['right_img_previous'] for item in batch])
     image_id = [item['id'] for item in batch]
     # calib_left = torch.stack([item['calib'] for item in batch], dim=0)  # a 12-value each row of P
+    image_label = [item['label'] for item in batch]
+    label_path = [item['label_path'] for item in batch]
     
     batch_dict = {
         "left_img": images_l.to(dtype=torch.float32),
         #"left_img_previous": images_l_p.to(dtype=torch.float32),
         "right_img": images_r.to(dtype=torch.float32),
         #"right_img_previous": images_r_p.to(dtype=torch.float32),
-        "id": image_id
+        "id": image_id,
+        "meta_label": image_label,
+        "label_path": label_path
         # "calib": calib_left.to(dtype=torch.float32)
     }
 
