@@ -127,6 +127,23 @@ class Evaluator():
 
             fields = line.split()
             cls_ = fields[0]
+            
+            # remove out of the range objects
+            if getattr(self.cfg, "short_grid_range", False) and cls_ != "DontCare":
+                try:
+                    x = float(fields[11])
+                    y = float(fields[12])
+                    z = float(fields[13])
+                except (IndexError, ValueError):
+                    continue
+            
+                # Drop objects outside the defined 3D range
+                if abs(x) > self.cfg.grid_size[0] / 2.0:  # beyond left/right limits
+                    continue
+                if y < self.cfg.H_min or y > self.cfg.H_max:   # outside vertical range
+                    continue
+                if z < 0 or z > self.cfg.grid_size[2]:         # outside forward depth range
+                    continue
 
             # Map original KITTI classes to your reduced set
             if cls_ in ("Car", "Van"):
