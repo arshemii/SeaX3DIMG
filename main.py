@@ -140,7 +140,7 @@ if __name__ == "__main__":
     if cfg.dev.mode == 'train':
         training(cfg)
     elif cfg.dev.mode == 'eval':
-        evaluation()
+        evaluation(cfg)
     else:
         raise NotImplementedError("Other modes not implemented yet!")
         
