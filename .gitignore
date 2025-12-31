@@ -1,5 +1,7 @@
 __pycache__/
 logging_dir/
+eval_dir/
+eval_dir_gt/
 *.onnx
 *.pth
 dataset/
