@@ -201,7 +201,7 @@ class Evaluator():
     def please_evaluate(self):
         
         import sys
-        sys.path.append("./kitti-object-eval-python")
+        sys.path.append("proc/kitti-object-eval-python")
         import kitti_common as kitti
         from eval import get_official_eval_result
         
