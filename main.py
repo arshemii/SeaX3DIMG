@@ -100,24 +100,23 @@ def evaluation(cfg):
     from SX3DIMG import get_SX3D_model
     from proc.evaluation import Evaluator
     
-    device = cfg.device[0]
-    model = get_SX3D_model(cfg)
-    model.to(device)
-    
     print("Evaluation has just started ...")
     
     if not os.path.exists(cfg.eval.save_dir):
+        device = cfg.device[0]
+        model = get_SX3D_model(cfg)
+        model.to(device)
         print("Start preparing data for evaluation ...")
         from utils.data_utils import collate_fn
         from utils.kitti_sx3d import kitti_sx3d
         dataset = kitti_sx3d(cfg, mode = 'val')
-        evaluator = Evaluator(cfg, model, dataset, collate_fn)
+        evaluator = Evaluator(cfg, dataset, collate_fn)
         print("Start generating predictions ...")
-        evaluator.generate_predictions()
+        evaluator.generate_predictions(model)
         print("Start modifying labels ...")
         evaluator.generate_labels()
     else:
-        evaluator = Evaluator(cfg, model, None, None)
+        evaluator = Evaluator(cfg, None, None)
 
     evaluator.please_evaluate()
 

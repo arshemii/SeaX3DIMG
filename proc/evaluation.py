@@ -7,13 +7,12 @@ import torch.nn.functional as F
 import utils.eval_utils as ev
 
 class Evaluator():
-    def __init__(self, cfg, model, dataset, collate_fn):
+    def __init__(self, cfg, dataset, collate_fn):
         
         self.cfg = cfg
         self.batch_size = self.cfg.eval.batch_size
         self.num_workers = self.cfg.eval.num_workers
         self.device = self.cfg.device[0]
-        self.model = model
         self.save_dir = self.cfg.eval.save_dir
         self.save_dir_GT = self.cfg.eval.save_dir_gt
         self.kernel = self.cfg.eval.local_maxima_kernel
@@ -165,8 +164,8 @@ class Evaluator():
                 self.modify_per_sample_gt(label_path)
             pbar.set_postfix({'status': "OK"})
 
-    def generate_predictions(self):
-        self.model.eval()
+    def generate_predictions(self, model):
+        model.eval()
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader),
                     desc="Prediction on dataset.")
         
@@ -176,7 +175,7 @@ class Evaluator():
             samples_idx = batch['id']
             
             with torch.no_grad():
-                outputs, _ = self.model(batch["left_img"], batch["right_img"])
+                outputs, _ = model(batch["left_img"], batch["right_img"])
             
             scores, max_probs, max_indices, centers, dims, yaw = self.out_preparation(outputs)
             
