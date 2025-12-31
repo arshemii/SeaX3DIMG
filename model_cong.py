@@ -244,8 +244,8 @@ def config_generator():
     cfg.eval.save_dir_gt = './eval_dir_gt/'
     cfg.eval.split_eval = './dataset/sequential/val.txt'
     cfg.eval.score_th = 0.20
-    cfg.eval.batch_size = 2
-    cfg.eval.num_workers = 2
+    cfg.eval.batch_size = 4
+    cfg.eval.num_workers = 0
     cfg.eval.topk = 13
     cfg.eval.local_maxima_kernel = 9
     cfg.eval.estimate_2d = True
