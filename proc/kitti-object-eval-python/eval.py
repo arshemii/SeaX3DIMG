@@ -739,13 +739,9 @@ def get_official_eval_result(gt_annos,
     min_overlaps = np.stack([overlap_mod, overlap_easy], axis=0)  # [2, 3, 5]
     class_to_name = {
         0: 'Car',
-        1: 'Pedestrian',
-        2: 'Cyclist',
-        3: 'Van',
-        4: 'Person_sitting',
-        5: 'car',
-        6: 'tractor',
-        7: 'trailer',
+        1: 'Truck',
+        2: 'Person',
+        3: 'Cyclist',
     }
     name_to_class = {v: n for n, v in class_to_name.items()}
     if not isinstance(current_classes, (list, tuple)):
@@ -807,13 +803,9 @@ def get_coco_eval_result(gt_annos,
                          z_center=1.0):
     class_to_name = {
         0: 'Car',
-        1: 'Pedestrian',
-        2: 'Cyclist',
-        3: 'Van',
-        4: 'Person_sitting',
-        5: 'car',
-        6: 'tractor',
-        7: 'trailer',
+        1: 'Truck',
+        2: 'Person',
+        3: 'Cyclist',
     }
     class_to_range = {
         0: [0.5, 1.0, 0.05],
