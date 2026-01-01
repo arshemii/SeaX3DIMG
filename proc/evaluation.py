@@ -71,12 +71,13 @@ class Evaluator():
 
         # cls_id: [W, H, D], cls_prob: [1, W, H, D]
         cls_ids    = cls_id[w_idx, h_idx, d_idx]                 # [N]
-        cls_scores = cls_prob[0, w_idx, h_idx, d_idx]            # [N]
+        # cls_scores = cls_prob[0, w_idx, h_idx, d_idx]            # [N]
 
         centers = cnt[b_idx, :, w_idx, h_idx, d_idx]           # [N, 3]
         dims    = dim[b_idx, :, w_idx, h_idx, d_idx]           # [N, 3]
         yaws    = yaw[b_idx, 0, w_idx, h_idx, d_idx]             # [N]
-        scores  = scores_sorted * cls_scores                     # [N]
+        # scores  = scores_sorted * cls_scores                     # [N]
+        scores  = scores_sorted                     # [N]
 
         P2 = self.cfg.camera.P_l[0]
     

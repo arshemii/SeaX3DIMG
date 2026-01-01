@@ -351,6 +351,6 @@ obj_list = create_obj_list(indices_sorted, scores_sorted,
 
 ##### --------------------------- Visualization
 cv.imshow("original image", img)
-heatmap_3d_v1(objectness_score, cfg, cfg.test.score_th)
+heatmap_3d_v2(objectness_score, cfg, 0.20)
 
 
