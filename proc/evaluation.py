@@ -79,20 +79,17 @@ class Evaluator():
         # scores  = scores_sorted * cls_scores                     # [N]
         scores  = scores_sorted                     # [N]
 
-        P2 = self.cfg.camera.P_l[0]
+        P2_original = self.cfg.camera.p_l_original[0]
     
         lines = []
         for i in range(centers.shape[0]):
-            if self.cfg.eval.estimate_2d:
-                lines.append(
-                    ev.create_prediction_line_est2d(
-                        centers[i], dims[i],
-                        yaws[i], scores[i], cls_ids[i], P2,
-                        self.cfg.eval.class_names
-                    )
+            lines.append(
+                ev.create_prediction_line_acc2d(
+                    centers[i], dims[i],
+                    yaws[i], scores[i], cls_ids[i], P2_original,
+                    self.cfg.eval.class_names
                 )
-            else:
-                raise NotImplementedError("An accurate 2D box prediction is not provided yet!")
+            )
     
         with open(out_path, "w") as f:
             f.write("\n".join(lines))

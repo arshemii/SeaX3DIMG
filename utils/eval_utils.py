@@ -58,7 +58,6 @@ def create_prediction_line_est2d(center, dim, yaw, score, cls_id, P2, class_name
     sc = score.item()
 
     # ---- 2D bbox: quick fake one via projecting center ----
-    # (replace with proper 3D-corner projection if you want accurate 2D AP)
     center_3d = torch.tensor([x, y, z, 1.0], dtype=torch.float32)
     uvd = P2 @ center_3d
     u = (uvd[0] / uvd[2]).item()
@@ -88,5 +87,74 @@ def create_prediction_line_est2d(center, dim, yaw, score, cls_id, P2, class_name
     
     return line
 
+def compute_corners(dimensions, alpha):
+    dtype = dimensions.dtype
+
+    num_boxes = dimensions.shape[0]
+    h, w, l = torch.split( dimensions.view(num_boxes, 1, 3), [1, 1, 1], dim=2)
+    unrot = torch.cat([torch.cat([l/2, l/2, -l/2, -l/2, l/2, l/2, -l/2, -l/2], dim=2),
+                       torch.cat([w/2, -w/2, -w/2, w/2, w/2, -w/2, -w/2, w/2], dim=2)], dim=1)
+    alpha_r = alpha.view(num_boxes, 1)
+
+    x_rot_vect = torch.cat([torch.cos(alpha_r), torch.sin(alpha_r)], dim=1).view(num_boxes, 2, 1)
+    x_rot = (unrot * x_rot_vect).sum(dim=1, keepdim=True)
+
+    z_rot_vect = torch.cat([-torch.sin(alpha_r), torch.cos(alpha_r)], dim=1).view(num_boxes, 2, 1)
+    z_rot = (unrot * z_rot_vect).sum(dim=1, keepdim=True)
+
+    zeros = torch.zeros((num_boxes, 1, 1), dtype=dtype)
+    if dimensions.is_cuda:
+        zeros = zeros.cuda()
+    y_rot = torch.cat([zeros, zeros, zeros, zeros, -h, -h, -h, -h], dim=2)
+
+    corners_rot = torch.cat([x_rot, y_rot, z_rot], dim=1)
+    return corners_rot
+
+def create_prediction_line_acc2d(center, dim, yaw, score, cls_id, P2, class_names):
+    x, y, z = center.tolist()
+    w3d, h3d, l3d = dim.tolist()
+    ry = yaw.item()
+    sc = score.item()
+
+    # build tensor for corners: compute_corners expects dims=(h,w,l)
+    dims_hwl = torch.tensor([[h3d, w3d, l3d]], dtype=torch.float32)
+    ry_t     = torch.tensor([ry], dtype=torch.float32)
+    
+    # compute corners relative to bottom centre (DSGN anchor)
+    corners = compute_corners(dims_hwl.unsqueeze(0), ry_t)[0].T  # (8,3)
+    
+    # shift to actual centre; compute_corners uses bottom anchor (top y=0, bottom y=–h)
+    # so adding y + h/2 moves the box so that its centre is at (x,y,z)
+    corners[:, 0] += x
+    corners[:, 1] += y + h3d / 2.0
+    corners[:, 2] += z
+
+    corners_h = torch.cat([corners, torch.ones((8, 1), dtype=torch.float32)], dim=1)  # homogeneous coords
+    pts_2d    = (P2 @ corners_h.T).T
+    pts_2d[:, 0] /= pts_2d[:, 2]
+    pts_2d[:, 1] /= pts_2d[:, 2]
+
+    # 2D bounding box from projected corners
+    xmin = pts_2d[:, 0].min().item()
+    ymin = pts_2d[:, 1].min().item()
+    xmax = pts_2d[:, 0].max().item()
+    ymax = pts_2d[:, 1].max().item()
+
+    # observation angle alpha: difference between box yaw and camera ray
+    alpha = ry - math.atan2(x, z)
+
+    # map class id to class name (KITTI wants type strings)
+    kitti_type = class_names[int(cls_id)]
+
+    # write KITTI-format detection line: type, trunc, occlusion, alpha, bbox2D, h,w,l, centre, ry, score
+    line = f"{kitti_type} 0.00 0 {alpha:.4f} " \
+           f"{xmin:.2f} {ymin:.2f} {xmax:.2f} {ymax:.2f} " \
+           f"{h3d:.2f} {w3d:.2f} {l3d:.2f} " \
+           f"{x:.2f} {y:.2f} {z:.2f} {ry:.4f} {sc:.4f}"
+
+    return line
+    
+
+# TODO
 def nms_python():
     raise NotImplementedError()

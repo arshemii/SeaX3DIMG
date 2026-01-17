@@ -118,6 +118,12 @@ def config_generator():
     
     cfg.data.object_AABB_scale = 1.2 # TODO: if model predicts a lot of objects, increase it 
     
+    cfg.camera.p_l_original = [torch.tensor([
+                                            [7.215377e+02, 0.0, 6.095593e+02, 4.485728e+01],
+                                            [0.0, 7.215377e+02, 1.728540e+02, 2.163791e-01],
+                                            [0.0, 0.0, 1.0, 2.745884e-03]
+                                            ], dtype=torch.float32)]
+    
     cfg.camera.P_l = [torch.tensor([[5.5771e+02, 0.0000e+00, 4.7116e+02, 3.4672e-02],
                                              [0.0000e+00, 5.5771e+02, 1.3361e+02, 1.6725e-04],
                                              [0.0000e+00, 0.0000e+00, 1.0000e+00, 2.7459e-06]
@@ -248,7 +254,6 @@ def config_generator():
     cfg.eval.num_workers = 0
     cfg.eval.topk = 30
     cfg.eval.local_maxima_kernel = 7
-    cfg.eval.estimate_2d = True
     cfg.eval.cl0 = "Car, Van"
     cfg.eval.cl1 = "Truck"
     cfg.eval.cl2 = "Pedestrian"
