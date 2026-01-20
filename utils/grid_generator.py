@@ -117,6 +117,10 @@ def grid_for_sample(pixel_coords, img_shape):
     
     # Unpack image dimensions
     H_img, W_img = img_shape
+    
+    # TODO: just normalizing to the feature resolution!
+    H_feat = int(H_img / 4)
+    W_feat = int(W_img / 4)
 
     # Unpack voxel grid dimensions
     _, W, H, D = pixel_coords.shape
@@ -126,10 +130,10 @@ def grid_for_sample(pixel_coords, img_shape):
     v = pixel_coords[0]  # (H, W, D)
     u = pixel_coords[1]  # (H, W, D)
 
-    # Normalize u (x direction)
-    norm_u = (u / (W_img - 1)) * 2 - 1  # range [-1, 1]
+    # TODO: Normalize u (x direction), check the ration 1/4
+    norm_u = (u / (W_feat - 1)) * 2 - 1  # range [-1, 1]
     # Normalize v (y direction)
-    norm_v = (v / (H_img - 1)) * 2 - 1  # range [-1, 1]
+    norm_v = (v / (H_feat - 1)) * 2 - 1  # range [-1, 1]
 
     # Stack and reorder into shape (H, W*D, 2)
     norm_grid = torch.stack([norm_u, norm_v], dim=-1)  # (W, H, D, 2)

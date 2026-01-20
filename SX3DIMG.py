@@ -75,6 +75,9 @@ class SX3DIMG(nn.Module):
         """
         # Level.forward now returns (h_out, cv_ref, disp, w)
         _, _, disp, conf = self.hrnet_disp(feature_l, feature_r)
+        
+        # TODO: should it be normalized?
+        
 
         disp_up = F.interpolate(disp, size=(feature_l.shape[2], feature_l.shape[3]),
                                 mode='bilinear', align_corners=True)                # (B,1,h/4,w/4)
