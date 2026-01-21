@@ -144,7 +144,7 @@ def parse_label(label_path, cfg):
 
 
 
-def voxel_assigner(label, cfg, debug = False):
+def voxel_assigner_occ(label, cfg, debug = False):
     """
     The function produces:
         1. An assignment with the shape 1, W, H, D where:
@@ -242,7 +242,70 @@ def voxel_assigner(label, cfg, debug = False):
         
         
     return assignments, center_voxels, valid_obj_mask
-    
+
+def voxel_assigner_cnt(label, cfg, debug=False):
+    assignments = torch.full(
+        (cfg.grid_resolution[0], cfg.grid_resolution[1], cfg.grid_resolution[2]),
+        fill_value=-1, dtype=torch.long
+    )
+    center_voxels = torch.full((cfg.max_obj, 3), fill_value=-1, dtype=torch.long)
+    valid_obj_mask = torch.full((cfg.max_obj,), fill_value=0, dtype=torch.long)
+
+    # NEW: center heatmap
+    center_heatmap = torch.zeros_like(assignments, dtype=torch.float32)
+
+    # precompute grid coords
+    xs, ys, zs = cfg.grid_forward[0][..., 0], cfg.grid_forward[0][..., 1], cfg.grid_forward[0][..., 2]
+
+    for gt_idx, det in enumerate(label):
+        valid_obj_mask[gt_idx] = 1
+        h, w, l = det['bbox3d'][:3]
+        cx, cy, cz = det['bbox3d'][3:6]
+        cat = int(det['category'])
+
+        # ---- Assignments (keep as is) ----
+        x_min, x_max = cx - w/2, cx + w/2
+        y_min, y_max = cy - h/2, cy + h/2
+        z_min, z_max = cz - l/2, cz + l/2
+
+        inside = (xs >= x_min) & (xs <= x_max) & \
+                 (ys >= y_min) & (ys <= y_max) & \
+                 (zs >= z_min) & (zs <= z_max)
+
+        if cat == cfg.data.ignore_class_id:
+            assignments[inside] = cfg.data.ignore_class_id
+        else:
+            assignments[inside] = gt_idx
+
+        # ---- Find center voxel ----
+        voxel_coords = cfg.grid_forward[0][inside]
+        dists = torch.norm(voxel_coords - det['bbox3d'][3:6], dim=1)
+        min_idx = torch.argmin(dists)
+        idx_flat = torch.nonzero(inside, as_tuple=False)[min_idx]
+        i, j, k = idx_flat.tolist()
+        center_voxels[gt_idx, :] = torch.tensor([i, j, k])
+
+        # ---- Gaussian heatmap around center ----
+        # choose radius in voxels (hyperparameter)
+        radius = cfg.loss.heatmap_radius  # e.g. 2 or 3
+        sigma = radius / 2.0
+
+        # create a local patch around center to save compute
+        x0, x1 = max(0, i - radius), min(center_heatmap.shape[0], i + radius + 1)
+        y0, y1 = max(0, j - radius), min(center_heatmap.shape[1], j + radius + 1)
+        z0, z1 = max(0, k - radius), min(center_heatmap.shape[2], k + radius + 1)
+
+        for xi in range(x0, x1):
+            for yj in range(y0, y1):
+                for zk in range(z0, z1):
+                    dist2 = (xi - i)**2 + (yj - j)**2 + (zk - k)**2
+                    heat_val = torch.exp(-dist2 / (2 * sigma**2))
+                    center_heatmap[xi, yj, zk] = max(center_heatmap[xi, yj, zk], heat_val)
+
+    # keep OOB as -3 (assignments)
+    assignments[~cfg.oob_mask_valid[0]] = -3
+
+    return assignments, center_voxels, valid_obj_mask, center_heatmap
 
 def img_resize(img, target_size):
     scale_1 = target_size[1]/img.shape[1]
