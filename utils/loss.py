@@ -47,12 +47,12 @@ class loss3d(nn.Module):
             tgt  = center_heatmap[b]               # [W,H,D]
     
             # optional: ignore OOB if you have a mask
-            # mask = self.oob_mask_valid (same shape) -> only use inside FOV
-            # pred = pred[mask]; tgt = tgt[mask]
+            mask = self.oob_mask_valid (same shape) -> only use inside FOV
+            pred = pred[mask]; tgt = tgt[mask]
     
             pred = pred.clamp(-20, 20)
 
-            # focal BCE (same as before but using heatmap target)
+            # focal BCE
             bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
             pt  = torch.exp(-bce).clamp(min=1e-6, max=1-1e-6)
             focal_loss = self.alpha * (1 - pt) ** self.gamma * bce
@@ -73,62 +73,58 @@ class loss3d(nn.Module):
        
     # DONE    
     def classification_loss(self, pred_cls_logits, pred_obj_logits, assignments, gtl):
+    def classification_loss(self, pred_cls_logits, pred_obj_logits,
+                                       assignments, gtl, center_heatmap,
+                                       heatmap_thr=0.5):
         """
-        Numerically stable classification loss with focal weighting and background KL regularization.
+        Classification loss using GT center heatmap mask.
     
         pred_cls_logits: [B, num_classes, W, H, D]
         pred_obj_logits: [B, 1, W, H, D]
-        assignments:     [B, W, H, D]
+        assignments:     [B, W, H, D] (still needed to map voxel -> object id)
         gtl:             [B, max_object, 12]
+        center_heatmap:  [B, W, H, D]  (GT Gaussian heatmap)
+        heatmap_thr:     threshold for selecting voxels near centers
         """
-        assert pred_cls_logits.shape[1] == self.num_c, "Class number mismatch in output and config"
-        
+        assert pred_cls_logits.shape[1] == self.num_c, "Class number mismatch"
+    
         loss_terms = []
         count = 0
+    
         for b in range(pred_cls_logits.shape[0]):
-            # Masks
-            obj_mask = (assignments[b] >= 0)
-            bg_mask = (assignments[b] == -1)
+            # ---- mask: use GT heatmap, not prediction ----
+            heat_mask = center_heatmap[b] > heatmap_thr  # [W,H,D]
     
-            # --- OBJECT VOXELS ---
+            # We only supervise classification where:
+            #   1) heatmap is high (near center)
+            #   2) there is a valid object assignment
+            obj_mask = heat_mask & (assignments[b] >= 0)
+    
+            # ---- OBJECT VOXELS (near center) ----
             if obj_mask.any():
-                voxel_obj_indices = assignments[b][obj_mask].long()         # [N]
-                target_tensor = gtl[b][voxel_obj_indices, 7].long()         # [N]
-                
-                assert (target_tensor >= 0).all(), "Target class < 0 detected"
+                voxel_obj_indices = assignments[b][obj_mask].long()  # [N]
+                target_tensor = gtl[b][voxel_obj_indices, 7].long()  # [N]
     
-                pred_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[obj_mask].clamp(-20, 20)  # [N, num_classes]
-                
-                ##### ------- Safety check, mjst be removed -------
-                has_nan = torch.isnan(pred_voxels).any()
-                has_inf = torch.isinf(pred_voxels).any()
-                if has_nan or has_inf:
-                    pred_voxels = torch.nan_to_num(pred_voxels, nan=1e-6, posinf=1e3)
-                    count += 1
-                ##### --------------------------------------------
-                # Standard CE with focal
+                pred_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[obj_mask].clamp(-20, 20)
+    
+                # focal CE (same style as your original)
                 ce = nn.functional.cross_entropy(pred_voxels, target_tensor, reduction='none', ignore_index=-100)
                 pt = torch.exp(-ce)
                 focal = self.alpha * (1 - pt) ** self.gamma * ce
                 loss_terms.append(focal.mean())
     
-            # --- BACKGROUND VOXELS KL REGULARIZATION ---
+            # ---- OPTIONAL: background regularization (same as your original) ----
+            # only if you still want KL on high-objectness background
+            # (this part is optional; keep or drop depending on stability)
+            bg_mask = heat_mask & (assignments[b] == -1)
             if bg_mask.any():
                 pred_bg_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[bg_mask].clamp(-20, 20)
-                pred_probs = nn.functional.softmax(pred_bg_voxels, dim=-1).clamp(min=1e-6)  # safe softmax
+                pred_probs = nn.functional.softmax(pred_bg_voxels, dim=-1).clamp(min=1e-6)
                 target_probs = torch.full_like(pred_probs, 1.0 / self.num_c).clamp(min=1e-6)
     
-                # Only penalize voxels with high objectness
                 high_obj_mask = torch.sigmoid(pred_obj_logits[b, 0][bg_mask]) > self.object_threshold
                 if high_obj_mask.any():
                     pred_probs_high = pred_probs[high_obj_mask]
-                    ##### ------- Safety check, mjst be removed -------
-                    has_nan = torch.isnan(pred_probs_high).any()
-                    has_inf = torch.isinf(pred_probs_high).any()
-                    if has_nan or has_inf:
-                        pred_probs_high = torch.nan_to_num(pred_probs_high, nan=1e-6, posinf=1e3)
-                        count += 1
-                    ##### --------------------------------------------
                     target_probs_high = target_probs[high_obj_mask]
                     kl_loss = nn.functional.kl_div(pred_probs_high.log(), target_probs_high, reduction='batchmean')
                     loss_terms.append(self.zeta * kl_loss)
