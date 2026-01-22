@@ -31,47 +31,41 @@ class loss3d(nn.Module):
                                           self.cfg.grid_unc[2]]).to(self.cfg.device[0])
       
     # DONE        
-    def object_conf_loss(self, pred_obj_logits, assignments):
+    def center_hm_loss(self, pred_obj_logits, center_heatmap):
         """
-        Focal BCE loss for objectness.
-        pred_obj_logits: [B, 1, W, H, D]
-        assignments:     [B, W, H, D]
+        Objectness loss using a Gaussian center heatmap target.
+
+        pred_obj_logits: [B, 1, W, H, D] (logits)
+        center_heatmap:  [B, W, H, D]    (float target in [0,1])
         """
         loss = []
         count = 0
+
         for b in range(pred_obj_logits.shape[0]):
-            mask = (assignments[b] >= -1)
-            if not mask.any():
-                continue
-            
-            pred = pred_obj_logits[b, 0][mask]
+            # flatten to match logits
+            pred = pred_obj_logits[b, 0]           # [W,H,D]
+            tgt  = center_heatmap[b]               # [W,H,D]
+    
+            # optional: ignore OOB if you have a mask
+            # mask = self.oob_mask_valid (same shape) -> only use inside FOV
+            # pred = pred[mask]; tgt = tgt[mask]
+    
             pred = pred.clamp(-20, 20)
-            tgt = (assignments[b][mask] >= 0).float()
-            
-            ##### ------- Safety check, mjst be removed -------
-            has_nan = torch.isnan(pred).any()
-            has_inf = torch.isinf(pred).any()
-            if has_nan or has_inf:
-                pred = torch.nan_to_num(pred, nan=1e-6, posinf=1e3)
-                count += 1
-            ##### --------------------------------------------
-            
-            # Standard CE with focal
+
+            # focal BCE (same as before but using heatmap target)
             bce = nn.functional.binary_cross_entropy_with_logits(pred, tgt, reduction='none')
             pt  = torch.exp(-bce).clamp(min=1e-6, max=1-1e-6)
-            
             focal_loss = self.alpha * (1 - pt) ** self.gamma * bce
-            
-            ##### ------- Safety check, mjst be removed -------
+
+            # safety
             has_nan = torch.isnan(focal_loss).any()
             has_inf = torch.isinf(focal_loss).any()
             if has_nan or has_inf:
                 focal_loss = torch.nan_to_num(focal_loss, nan=1e-6, posinf=1e3)
                 count += 1
-            ##### ---------------------------------------------
-            
+
             loss.append(focal_loss.mean())
-    
+
         if len(loss) == 0:
             return torch.tensor(0.0, device=pred_obj_logits.device, requires_grad=True), count
         else:
