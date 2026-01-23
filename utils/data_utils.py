@@ -286,8 +286,15 @@ def voxel_assigner_cnt(label, cfg, debug=False):
         center_voxels[gt_idx, :] = torch.tensor([i, j, k])
 
         # ---- Gaussian heatmap around center ----
-        # choose radius in voxels (hyperparameter)
-        radius = cfg.loss.heatmap_radius  # e.g. 2 or 3
+        # calculate the radius
+        idx = torch.nonzero(inside, as_tuple=False)  # [N,3] => (i,j,k)
+        i_min, j_min, k_min = idx.min(dim=0).values
+        i_max, j_max, k_max = idx.max(dim=0).values
+        
+        extent_x = i_max - i_min + 1  # number of voxels in x
+        extent_y = j_max - j_min + 1
+        extent_z = k_max - k_min + 1
+        radius = max(1, int(min(extent_x, extent_y, extent_z) / 2))
         sigma = radius / 2.0
 
         # create a local patch around center to save compute
