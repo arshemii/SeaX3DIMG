@@ -26,6 +26,7 @@ class loss3d(nn.Module):
         self.beta = self.cfg.loss.beta
         self.object_threshold = self.cfg.loss.object_threshold_loss
         self.zeta = self.cfg.loss.zeta
+        self.heatmap_thr = self.cfg.loss.heatmap_thr
         self.center_scale = torch.tensor([self.cfg.grid_unc[0],
                                           self.cfg.grid_unc[1],
                                           self.cfg.grid_unc[2]]).to(self.cfg.device[0])
@@ -39,8 +40,6 @@ class loss3d(nn.Module):
         center_heatmap:  [B, W, H, D]    (float target in [0,1])
         """
         loss = []
-        count = 0
-
         for b in range(pred_obj_logits.shape[0]):
             # flatten to match logits
             pred = pred_obj_logits[b, 0]           # [W,H,D]
@@ -62,20 +61,16 @@ class loss3d(nn.Module):
             has_inf = torch.isinf(focal_loss).any()
             if has_nan or has_inf:
                 focal_loss = torch.nan_to_num(focal_loss, nan=1e-6, posinf=1e3)
-                count += 1
-
             loss.append(focal_loss.mean())
 
         if len(loss) == 0:
-            return torch.tensor(0.0, device=pred_obj_logits.device, requires_grad=True), count
+            return torch.tensor(0.0, device=pred_obj_logits.device, requires_grad=True)
         else:
-            return torch.stack(loss).mean(), count
+            return torch.stack(loss).mean()
        
     # DONE    
-    def classification_loss(self, pred_cls_logits, pred_obj_logits, assignments, gtl):
     def classification_loss(self, pred_cls_logits, pred_obj_logits,
-                                       assignments, gtl, center_heatmap,
-                                       heatmap_thr=0.5):
+                                       assignments, gtl, center_heatmap):
         """
         Classification loss using GT center heatmap mask.
     
@@ -83,17 +78,13 @@ class loss3d(nn.Module):
         pred_obj_logits: [B, 1, W, H, D]
         assignments:     [B, W, H, D] (still needed to map voxel -> object id)
         gtl:             [B, max_object, 12]
-        center_heatmap:  [B, W, H, D]  (GT Gaussian heatmap)
-        heatmap_thr:     threshold for selecting voxels near centers
-        """
+        center_heatmap:  [B, W, H, D]  (GT Gaussian heatmap)        """
         assert pred_cls_logits.shape[1] == self.num_c, "Class number mismatch"
     
-        loss_terms = []
-        count = 0
-    
+        loss_terms = []    
         for b in range(pred_cls_logits.shape[0]):
             # ---- mask: use GT heatmap, not prediction ----
-            heat_mask = center_heatmap[b] > heatmap_thr  # [W,H,D]
+            heat_mask = center_heatmap[b] > self.heatmap_thr  # [W,H,D]
     
             # We only supervise classification where:
             #   1) heatmap is high (near center)
@@ -113,9 +104,7 @@ class loss3d(nn.Module):
                 focal = self.alpha * (1 - pt) ** self.gamma * ce
                 loss_terms.append(focal.mean())
     
-            # ---- OPTIONAL: background regularization (same as your original) ----
-            # only if you still want KL on high-objectness background
-            # (this part is optional; keep or drop depending on stability)
+            # KL on high-objectness background
             bg_mask = heat_mask & (assignments[b] == -1)
             if bg_mask.any():
                 pred_bg_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[bg_mask].clamp(-20, 20)
@@ -130,39 +119,45 @@ class loss3d(nn.Module):
                     loss_terms.append(self.zeta * kl_loss)
     
         if not loss_terms:
-            return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True), count
+            return torch.tensor(0.0, device=pred_cls_logits.device, requires_grad=True)
         else:
-            return torch.stack(loss_terms).mean(), count
+            return torch.stack(loss_terms).mean()
        
     # DONE    
-    def center_loss(self, pred_offsets, assignments, gtl):
+    def center_loss(self, pred_offsets, assignments, gtl, center_heatmap, heatmap_thr=0.5):
         """
-        The loss for center is calculated for each voxel that is assigned to a valid object
-        
-        pred_offsets:   [B, 3, W, H, D] --> inside the model head is normalized [-1, +1] using torch.tanh 
-        assignments:    [B, W, H, D]
-        gtl:            [B, 18, 12] --> gtl[b, :, 3:6] are (cx_off, ch_off, cz_off)
+        Center offset loss using GT heatmap mask.
+    
+        pred_offsets:   [B, 3, W, H, D] (tanh output, so offsets are in [-1,1])
+        assignments:    [B, W, H, D] (object id per voxel)
+        gtl:            [B, max_object, 12] (gtl[..., 3:6] are centers)
+        center_heatmap: [B, W, H, D] (GT Gaussian heatmap)
+        heatmap_thr:    threshold for selecting voxels near centers
         """
-        loss_terms = []
-        count = 0
+        loss_terms = []    
         for b in range(pred_offsets.shape[0]):
-            # Mask for valid object voxels
-            valid_mask = (assignments[b] >= 0)
+            # ---- use GT heatmap mask (near center) ----
+            heat_mask = center_heatmap[b] > heatmap_thr
+    
+            # only voxels with valid object assignments and near-center heatmap
+            valid_mask = heat_mask & (assignments[b] >= 0)
             if not valid_mask.any():
                 continue
     
             i, j, k = torch.nonzero(valid_mask, as_tuple=True)
             gt_indices = assignments[b][i, j, k].long()
-            
-            assert (gt_indices >= gtl.shape[1]).sum() == 0
     
-            voxel_centers = self.grid[i, j, k, :].to(pred_offsets.device)    # (N, 3)
-            pred_offsets_valid = pred_offsets[b][:, i, j, k].permute(1, 0)   # (N, 3)
+            # voxel centers in world coordinates
+            voxel_centers = self.grid[i, j, k, :].to(pred_offsets.device)  # (N,3)
     
+            # predicted offsets (scaled by voxel size)
+            pred_offsets_valid = pred_offsets[b][:, i, j, k].permute(1, 0)  # (N,3)
             pred_obj_centers = voxel_centers + (pred_offsets_valid * self.center_scale)
+    
+            # GT centers
             gt_centers = gtl[b, gt_indices, 3:6].to(pred_offsets.device)
     
-            # Filter out any NaNs/Infs in pred or gt
+            # remove NaNs / invalid
             valid_values = (~torch.isnan(pred_obj_centers).any(dim=1)) & (~torch.isnan(gt_centers).any(dim=1))
             if not valid_values.any():
                 continue
@@ -172,15 +167,15 @@ class loss3d(nn.Module):
     
             l1 = nn.functional.smooth_l1_loss(pred_obj_centers, gt_centers, reduction='none', beta=self.beta)
             if torch.isnan(l1).any() or torch.isinf(l1).any():
-                count += 1
                 l1 = torch.nan_to_num(l1, nan=0.0, posinf=1e3, neginf=-1e3)
+    
             l1 = l1.mean(dim=1)  # per voxel
             loss_terms.append(l1.mean())
     
         if not loss_terms:
-            return torch.tensor(0.0, device=pred_offsets.device, requires_grad=True), count
+            return torch.tensor(0.0, device=pred_offsets.device, requires_grad=True)
         else:
-            return torch.stack(loss_terms).mean(), count
+            return torch.stack(loss_terms).mean()
     
     # DONE
     def dimension_loss(self, pred_dims, assignments, gtl):
@@ -193,7 +188,6 @@ class loss3d(nn.Module):
         gtl:                [B, 18, 12] --> gtl[b, :, :3] are (w, h, l)
         """
         loss = []
-        count = 0
         for b in range(pred_dims.shape[0]):
             valid_mask = (assignments[b] >= 0)
             
@@ -217,7 +211,6 @@ class loss3d(nn.Module):
             has_inf = torch.isinf(pred).any()
             if has_nan or has_inf:
                 pred = torch.nan_to_num(pred, nan=1e-6, posinf=1e3)
-                count += 1
             ##### --------------------------------------------
             
             # L1 loss per object
@@ -239,7 +232,6 @@ class loss3d(nn.Module):
         gtl:                [B, 18, 12] --> gtl[b, :, 6] is yaw
         """
         loss_terms = []
-        count = 0
         for b in range(pred_yaw.shape[0]):
             valid_mask = (assignments[b] >= 0)
             
@@ -265,11 +257,9 @@ class loss3d(nn.Module):
             loss_sin = nn.functional.smooth_l1_loss(pred_sin, gt_sin, reduction='mean', beta=self.beta)
             loss_cos = nn.functional.smooth_l1_loss(pred_cos, gt_cos, reduction='mean', beta=self.beta)
             if torch.isnan(loss_sin).any() or torch.isinf(loss_sin).any():
-                count += 1
                 loss_sin = torch.nan_to_num(loss_sin, nan=0.0, posinf=1e3, neginf=-1e3)
                 
             if torch.isnan(loss_cos).any() or torch.isinf(loss_cos).any():
-                count += 1
                 loss_cos = torch.nan_to_num(loss_cos, nan=0.0, posinf=1e3, neginf=-1e3)
                 
             loss_terms.append(0.5 * (loss_sin + loss_cos))
@@ -286,7 +276,6 @@ class loss3d(nn.Module):
         disparity_gtl:  [B, 1, H/4, W/4]
         """
         self.B = len(disparity_pred)
-        count = 0
 
         if normalized:
             disparity_pred = disparity_pred / self.cfg.loss.max_disp
@@ -311,7 +300,6 @@ class loss3d(nn.Module):
         has_inf = torch.isinf(pred_valid).any()
         if has_nan or has_inf:
             pred_valid = torch.nan_to_num(pred_valid, nan=1e-6, posinf=1e3)
-            count += 1
         ##### --------------------------------------------
 
         if normalized:
