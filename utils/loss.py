@@ -46,7 +46,7 @@ class loss3d(nn.Module):
             tgt  = center_heatmap[b]               # [W,H,D]
     
             # optional: ignore OOB if you have a mask
-            mask = self.oob_mask_valid (same shape) -> only use inside FOV
+            mask = self.oob_mask_valid
             pred = pred[mask]; tgt = tgt[mask]
     
             pred = pred.clamp(-20, 20)
