@@ -113,8 +113,8 @@ def config_generator():
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
     
     cfg.data.path = './dataset/sequential/'
-    cfg.data.filter = [{"trunc": 0.8,
-                        "occl": [0, 1, 2]}]
+    cfg.data.filter = [{"trunc": 1.0,
+                        "occl": [0, 1, 2, 3]}]
     
     cfg.data.object_AABB_scale = 1.2 # TODO: if model predicts a lot of objects, increase it 
     
