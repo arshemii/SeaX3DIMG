@@ -24,10 +24,6 @@ def load_checkpoint(filename, model, optimizer=None):
         optimizer.load_state_dict(checkpoint['optimizer_state'])
     return checkpoint.get('epoch', 0)
 
-def interpolate_weights(w1, w2, alpha):
-    """Linearly interpolate between two lists of weights."""
-    return [(1 - alpha) * a + alpha * b for a, b in zip(w1, w2)]
-
 class Trainer:
     def __init__(self, cfg, model, dataset, collate_fn,
                  optimizer, scheduler, loss_fn, resume_checkpoint=None):
@@ -119,15 +115,15 @@ class Trainer:
                     
                 if 'obj_head' in self.heads_for_loss:
                     batch['assignment'] = batch['assignment'].to(self.device)
-                    loss['obj_head'], _ = self.loss_fn.object_conf_loss(outputs[0], batch['assignment'])
+                    loss['obj_head'], _ = self.loss_fn.center_hm_loss(outputs[0], batch['assignment'], batch['center_heatmap'])
                     
                 if 'cls_head' in self.heads_for_loss:
                     batch["label"] = batch["label"].to(self.device)
                     loss['cls_head'], _ = self.loss_fn.classification_loss(outputs[1], outputs[0],
-                                                                          batch['assignment'], batch["label"])
+                                                                          batch['assignment'], batch["label"], batch['center_heatmap'])
                 
                 if 'cnt_head' in self.heads_for_loss:
-                    loss['cnt_head'], _ = self.loss_fn.center_loss(outputs[2], batch['assignment'], batch["label"])
+                    loss['cnt_head'], _ = self.loss_fn.center_loss(outputs[2], batch['assignment'], batch["label"], batch['center_heatmap'])
 
                 if 'dim_head' in self.heads_for_loss:
                     loss['dim_head'], _ = self.loss_fn.dimension_loss(outputs[3], batch['assignment'], batch["label"])
@@ -136,7 +132,7 @@ class Trainer:
                     loss['yaw_head'], _ = self.loss_fn.yaw_loss(outputs[4], batch['assignment'], batch["label"])
                     
                 
-                del batch["label"], batch['assignment']
+                del batch["label"], batch['assignment'], batch['center_heatmap']
                                     
                 if self.cfg.loss.heads == ['disp']:
                     loss['total'] = loss['disp']
