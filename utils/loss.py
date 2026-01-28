@@ -20,7 +20,6 @@ class loss3d(nn.Module):
         
         self.oob_mask_valid = cfg.oob_mask_valid[0] # inside FOV --> True
         self.num_c = self.cfg.model.num_class
-        # self.loss_weights = self.cfg.loss.weight
         self.alpha = self.cfg.loss.alpha
         self.gamma = self.cfg.loss.gamma
         self.beta = self.cfg.loss.beta
