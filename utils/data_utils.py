@@ -40,9 +40,9 @@ def parse_id_file(set_path, data_dir):
             entry = {
                 "ID": instance_str,
                 "img_l_path": os.path.join(data_dir, 'prev_2', instance_str + '_01.png'),
-                "img_l_path_previous": os.path.join(data_dir, 'prev_2', instance_str + '_02.png'),
+                # "img_l_path_previous": os.path.join(data_dir, 'prev_2', instance_str + '_02.png'),
                 "img_r_path": os.path.join(data_dir, 'prev_3', instance_str + '_01.png'),
-                "img_r_path_previous": os.path.join(data_dir, 'prev_3', instance_str + '_02.png'),
+                # "img_r_path_previous": os.path.join(data_dir, 'prev_3', instance_str + '_02.png'),
                 "calib_path": os.path.join(data_dir, 'calib', instance_str + '.txt'),
                 "lidar_path": os.path.join(data_dir, 'velodyne', instance_str + '.bin')
             }
@@ -244,14 +244,13 @@ def voxel_assigner_occ(label, cfg, debug = False):
     return assignments, center_voxels, valid_obj_mask
 
 def voxel_assigner_cnt(label, cfg, debug=False):
-    assignments = torch.full(
-        (cfg.grid_resolution[0], cfg.grid_resolution[1], cfg.grid_resolution[2]),
-        fill_value=-1, dtype=torch.long
-    )
+    assignments = torch.full((cfg.grid_resolution[0], cfg.grid_resolution[1], cfg.grid_resolution[2]),
+                                fill_value=-1, dtype=torch.long)
+    
     center_voxels = torch.full((cfg.max_obj, 3), fill_value=-1, dtype=torch.long)
     valid_obj_mask = torch.full((cfg.max_obj,), fill_value=0, dtype=torch.long)
 
-    # NEW: center heatmap
+    # center heatmap
     center_heatmap = torch.zeros_like(assignments, dtype=torch.float32)
 
     # precompute grid coords
@@ -507,29 +506,21 @@ def get_focal_baseline(P_l, P_r):
 def collate_fn(batch):
     # a batch is a list
     images_l = torch.stack([item['left_img'] for item in batch])          # [B, 3, H, W]
-    #images_l_p = torch.stack([item['left_img_previous'] for item in batch])
     images_r = torch.stack([item['right_img'] for item in batch])
-    #images_r_p = torch.stack([item['right_img_previous'] for item in batch])
     image_id = [item['id'] for item in batch]
-    # calib_left = torch.stack([item['calib'] for item in batch], dim=0)  # a 12-value each row of P
     image_label = [item['label'] for item in batch]
     label_path = [item['label_path'] for item in batch]
     
     batch_dict = {
         "left_img": images_l.to(dtype=torch.float32),
-        #"left_img_previous": images_l_p.to(dtype=torch.float32),
         "right_img": images_r.to(dtype=torch.float32),
-        #"right_img_previous": images_r_p.to(dtype=torch.float32),
-        "id": image_id,
-        "meta_label": image_label,
         "label_path": label_path
-        # "calib": calib_left.to(dtype=torch.float32)
     }
 
     if "label" in batch[0].keys():
         batch_dict['assignment'] = torch.stack([item['assignment'] for item in batch])
         batch_dict['disparity'] = torch.stack([item['disparity'] for item in batch])
-       #  batch_dict["assignment_bev"] = torch.stack([item['assignment_bev'] for item in batch])
+        batch_dict["center_heatmap"] = torch.stack([item['center_heatmap'] for item in batch])
         
         max_objects = batch[0]['valid_obj'].shape[0] # from dataset statistics
         feature_number = (7   # bbox 3d
