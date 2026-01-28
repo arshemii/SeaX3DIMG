@@ -124,7 +124,7 @@ class loss3d(nn.Module):
             return torch.stack(loss_terms).mean()
        
     # DONE    
-    def center_loss(self, pred_offsets, assignments, gtl, center_heatmap, heatmap_thr=0.5):
+    def center_loss(self, pred_offsets, assignments, gtl, center_heatmap):
         """
         Center offset loss using GT heatmap mask.
     
@@ -137,7 +137,7 @@ class loss3d(nn.Module):
         loss_terms = []    
         for b in range(pred_offsets.shape[0]):
             # ---- use GT heatmap mask (near center) ----
-            heat_mask = center_heatmap[b] > heatmap_thr
+            heat_mask = center_heatmap[b] > self.heatmap_thr
     
             # only voxels with valid object assignments and near-center heatmap
             valid_mask = heat_mask & (assignments[b] >= 0)
