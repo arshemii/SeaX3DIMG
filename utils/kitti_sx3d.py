@@ -53,7 +53,7 @@ class kitti_sx3d(Dataset):
     def _voxel_sup(self):
         
         for instance in self.DF:
-            instance["ass"], instance["c_vox"], instance["valid_obj"] = du.voxel_assigner(instance["labels"], self.cfg)
+            instance["ass"], instance["c_vox"], instance["valid_obj"] = du.voxel_assigner_cnt(instance["labels"], self.cfg)
 
     def _pcl_gen(self):
         for instance in self.DF:
