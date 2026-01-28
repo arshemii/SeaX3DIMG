@@ -53,7 +53,7 @@ class kitti_sx3d(Dataset):
     def _voxel_sup(self):
         
         for instance in self.DF:
-            instance["ass"], instance["c_vox"], instance["valid_obj"] = du.voxel_assigner_cnt(instance["labels"], self.cfg)
+            instance["ass"], instance["c_vox"], instance["valid_obj"], instance['center_heatmap'] = du.voxel_assigner_cnt(instance["labels"], self.cfg)
 
     def _pcl_gen(self):
         for instance in self.DF:
@@ -98,6 +98,7 @@ class kitti_sx3d(Dataset):
             data["disparity"] = instance["depth"]
             data["assignment"] = instance["ass"]
             data["center_voxel"] = instance["c_vox"]
+            data["center_heatmap"] = instance['center_heatmap']
             data["valid_obj"] = instance["valid_obj"]
             data["label_path"] = instance['label_path']
         
