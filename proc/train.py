@@ -115,7 +115,7 @@ class Trainer:
                     
                 if 'obj_head' in self.heads_for_loss:
                     batch['assignment'] = batch['assignment'].to(self.device)
-                    loss['obj_head'], _ = self.loss_fn.center_hm_loss(outputs[0], batch['assignment'], batch['center_heatmap'])
+                    loss['obj_head'], _ = self.loss_fn.center_hm_loss(outputs[0], batch['center_heatmap'])
                     
                 if 'cls_head' in self.heads_for_loss:
                     batch["label"] = batch["label"].to(self.device)
