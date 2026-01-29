@@ -239,6 +239,7 @@ def config_generator():
     cfg.loss.gamma = 2.0
     cfg.loss.beta = 1.4
     cfg.loss.object_threshold_loss = 0.5
+    cfg.loss.heatmap_thr = 0.5
     cfg.loss.zeta = 0.2    # to penalize background voxels if objectness is high
     cfg.loss.optimized = True
     cfg.loss.debug = False
