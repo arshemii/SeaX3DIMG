@@ -110,26 +110,26 @@ class Trainer:
                 loss = {'total': 0.0}
                 if 'disp' in self.heads_for_loss:
                     batch["disparity"] = batch["disparity"].to(self.device)
-                    loss['disp'], _ = self.loss_fn.disparity_loss(disp, batch["disparity"])
+                    loss['disp'] = self.loss_fn.disparity_loss(disp, batch["disparity"])
                     del disp, batch["disparity"]
                     
                 if 'obj_head' in self.heads_for_loss:
                     batch['assignment'] = batch['assignment'].to(self.device)
-                    loss['obj_head'], _ = self.loss_fn.center_hm_loss(outputs[0], batch['center_heatmap'])
+                    loss['obj_head'] = self.loss_fn.center_hm_loss(outputs[0], batch['center_heatmap'])
                     
                 if 'cls_head' in self.heads_for_loss:
                     batch["label"] = batch["label"].to(self.device)
-                    loss['cls_head'], _ = self.loss_fn.classification_loss(outputs[1], outputs[0],
+                    loss['cls_head'] = self.loss_fn.classification_loss(outputs[1], outputs[0],
                                                                           batch['assignment'], batch["label"], batch['center_heatmap'])
                 
                 if 'cnt_head' in self.heads_for_loss:
-                    loss['cnt_head'], _ = self.loss_fn.center_loss(outputs[2], batch['assignment'], batch["label"], batch['center_heatmap'])
+                    loss['cnt_head'] = self.loss_fn.center_loss(outputs[2], batch['assignment'], batch["label"], batch['center_heatmap'])
 
                 if 'dim_head' in self.heads_for_loss:
-                    loss['dim_head'], _ = self.loss_fn.dimension_loss(outputs[3], batch['assignment'], batch["label"])
+                    loss['dim_head'] = self.loss_fn.dimension_loss(outputs[3], batch['assignment'], batch["label"])
                     
                 if 'yaw_head' in self.heads_for_loss:
-                    loss['yaw_head'], _ = self.loss_fn.yaw_loss(outputs[4], batch['assignment'], batch["label"])
+                    loss['yaw_head'] = self.loss_fn.yaw_loss(outputs[4], batch['assignment'], batch["label"])
                     
                 
                 del batch["label"], batch['assignment'], batch['center_heatmap']
