@@ -217,9 +217,9 @@ class loss3d(nn.Module):
             loss.append(l1.mean())
     
         if len(loss) == 0:
-            return torch.tensor(0.0, device=pred_dims.device, requires_grad=True), count
+            return torch.tensor(0.0, device=pred_dims.device, requires_grad=True)
         else:
-            return torch.stack(loss).mean(), count
+            return torch.stack(loss).mean()
         
     # DONE
     def yaw_loss(self, pred_yaw, assignments, gtl):
@@ -264,9 +264,9 @@ class loss3d(nn.Module):
             loss_terms.append(0.5 * (loss_sin + loss_cos))
     
         if len(loss_terms) == 0:
-            return torch.tensor(0.0, device=pred_yaw.device, requires_grad=True), count
+            return torch.tensor(0.0, device=pred_yaw.device, requires_grad=True)
         else:
-            return torch.stack(loss_terms).mean(), count
+            return torch.stack(loss_terms).mean()
 
     # DONE
     def disparity_loss(self, disparity_pred, disparity_gtl, normalized = True):
@@ -302,10 +302,10 @@ class loss3d(nn.Module):
         ##### --------------------------------------------
 
         if normalized:
-            #return nn.functional.l1_loss(torch.log(pred_valid + 1e-6), torch.log(gtl_valid + 1e-6)), count
-            return nn.functional.smooth_l1_loss(torch.log(pred_valid + 1e-6), torch.log(gtl_valid + 1e-6)), count
+            #return nn.functional.l1_loss(torch.log(pred_valid + 1e-6), torch.log(gtl_valid + 1e-6))
+            return nn.functional.smooth_l1_loss(torch.log(pred_valid + 1e-6), torch.log(gtl_valid + 1e-6))
         else:
-            return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta), count
+            return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta)
 
     def forward(self, prediction, disparity_pred,
                 gtl, assignments, disparity_gtl):
