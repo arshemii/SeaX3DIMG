@@ -228,7 +228,7 @@ def config_generator():
     # Staging:
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
-    cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
+    cfg.loss.heads = ['disp']
     cfg.loss.w_total_previous = [0.08, 0.08, 0.05, 0.10]  # main experiment with 0.15, [0.05, 0.10], [0.02, 0.05, 0.20],  [0.02, 0.02, 0.05, 0.15]
     cfg.loss.w_yaw = 0.90
     cfg.loss.freeze = False
