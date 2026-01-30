@@ -107,7 +107,7 @@ def config_generator():
     cfg.model.max_disp = 16
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
-    cfg.model.sx3d.use_checkpoint = True
+    cfg.model.sx3d.use_checkpoint = False
     cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/fullhead.pth'
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
