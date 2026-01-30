@@ -159,10 +159,12 @@ class LevelInit(nn.Module):
         pad_h = (4 - 1) // 2
         pad_w = (4 - 1) // 2
         rt = F.pad(r, (pad_w, pad_w, pad_h, pad_h))
-        rt = F.conv2d(rt, self.conv_reduce.weight, self.conv_reduce.bias, stride=(4, 1))
+        rt = F.conv2d(rt, self.conv_reduce.weight, self.conv_reduce.bias, stride=(4, 4))
         rt = self.conv_em(rt)
 
         # cost volume: (B, D, H4, W4)
+        lt = F.normalize(lt, p=2, dim=1)
+        rt = F.normalize(rt, p=2, dim=1)
         cv = make_cost_volume_v2(lt, rt, self.max_disp)  # (B, C, D, H4, W4) with C = channels difference
         # collapse channel difference to cost per disparity by L1-norm across feature channels
         cv = torch.norm(cv, p=1, dim=1, keepdim=True)  # (B, 1, D, H4, W4)
@@ -239,10 +241,10 @@ class Level(nn.Module):
         p_out, cv_ref, disp, conf = self.init(l, r, ref)
         if self.h_size == 1:
             h_out, w = self.prop([p_out], l, r, conf=conf)
-            return h_out, cv_ref, disp, w  # keep similar interface
+            return h_out, cv_ref, disp, w, conf  # keep similar interface
         else:
             # if multi-level pipeline desired (not used often here), we can pass h into prop
             h_out, w = self.prop([p_out, h], l, r, conf=conf)
             # combine hypothesis channels with soft selection (weighted sum) rather than strict where
             # keep simple: return h_out, cv_ref, disp, w
-            return h_out, cv_ref, disp, w
+            return h_out, cv_ref, disp, w, conf

@@ -72,7 +72,7 @@ class SX3DIMG(nn.Module):
              
         """
         # Level.forward now returns (h_out, cv_ref, disp, w)
-        _, _, disp, conf = self.hrnet_disp(feature_l, feature_r)
+        _, _, disp, _, conf = self.hrnet_disp(feature_l, feature_r)
         
         # TODO: should it be normalized?
         
