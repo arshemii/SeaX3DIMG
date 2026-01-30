@@ -281,7 +281,7 @@ class loss3d(nn.Module):
             disparity_gtl = disparity_gtl / self.cfg.loss.max_disp
         
         if disparity_pred.numel() == 0:
-            return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True), count
+            return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True)
     
         assert disparity_gtl.shape == disparity_pred.shape, \
             f"gt is {disparity_gtl.shape} but pred is {disparity_pred.shape}"
@@ -289,7 +289,7 @@ class loss3d(nn.Module):
         valid_mask = (disparity_gtl > 0)
     
         if not valid_mask.any():  # no valid pixels
-            return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True), count
+            return torch.tensor(0.0, device=disparity_pred.device, requires_grad=True)
         
         pred_valid = disparity_pred[valid_mask]   
         gtl_valid  = disparity_gtl[valid_mask]
@@ -307,71 +307,6 @@ class loss3d(nn.Module):
         else:
             return nn.functional.smooth_l1_loss(pred_valid, gtl_valid, reduction='mean', beta=self.beta)
 
-    def forward(self, prediction, disparity_pred,
-                gtl, assignments, disparity_gtl):
-        """
-        prediction is a tuple:
-            prediction[0] = objectness            --> [B,1,D,H,W]
-            prediction[1] = box dim               --> [B,3,D,H,W]
-            prediction[2] = center offsets        --> [B,3,D,H,W]
-            prediction[3] = class probabilities   --> [B,K,D,H,W]
-            prediction[4] = yaw angle             --> [B,1,D,H,W]
-            
-        gtl is is a Tensor --> [B, max_object, 12]
-            max_object: maximum possible object in a frame (from dataset statistics)
-            12 --> label items:
-                BBOX:           [h, w, l, cx, cy, cz, yaw]                              --> 0:7
-                category:       (zero to num_classes-1 and -2 for not ignored class)    --> 7
-                closest voxel:                                                          --> 8:11
-                valid flag:     [1 valid, 0 non-valid]                                  --> 11
-                ** valid flag can be directly obtained from assignment, but for computational
-                   efficiency, we have this **
-            
-        assignments:                        [B, W, H, D] --> -3: OOB, -2: ignored, -1: bg, rest are obj index
-        disparity_pred:                     [B, 1, 128, 240]
-        disparity_gtl:                      [B, 1, 128, 240]
-        """
-        assert gtl.shape == (len(prediction[0]), self.cfg.max_obj, 12), "Wrong gtl, Collate function must be checked!"
-        
-        self.B = len(prediction[0])
-        self.loss = {}
-        
-        if self.B == 0:
-            device = prediction.device
-            if self.cfg.loss.aux_loss:
-                return {k: torch.tensor(0.0, device=device) for k in ['obj_conf', 'cls_loss', 'center_loss', 'dim_loss', 'yaw_angle_loss','disparity_loss', 'total']}
-            else:
-                return {k: torch.tensor(0.0, device=device) for k in ['obj_conf', 'cls_loss', 'center_loss', 'dim_loss', 'yaw_angle_loss', 'total']}
-
-        
-        # Objectness loss
-        self.loss['obj_conf'] = self.object_conf_loss(prediction[0], assignments)
-
-        # class loss
-        self.loss['cls_loss'] = self.classification_loss(prediction[3], prediction[0], assignments, gtl)
-        
-        # bbox center loss
-        self.loss['center_loss'] = self.center_loss(prediction[2], assignments, gtl)
-
-        # bbox dim loss
-        self.loss['dim_loss'] = self.dimension_loss(prediction[1], assignments, gtl)
-        
-        # yaw angle loss
-        self.loss['yaw_angle_loss'] = self.yaw_loss(prediction[4], assignments, gtl)
-        
-        if self.cfg.loss.aux_loss:
-            assert disparity_pred != None and disparity_gtl != None
-            self.loss['disparity_loss'] = self.disparity_loss(disparity_pred, disparity_gtl)
-
-        # Total loss: Sum of all loss considering their importance based on self.loss_weights
-        self.loss['total'] = self.loss_weights[0]*self.loss['obj_conf'] + \
-                                self.loss_weights[1]*self.loss['cls_loss'] + \
-                                self.loss_weights[2]*self.loss['center_loss'] + \
-                                self.loss_weights[3]*self.loss['dim_loss'] + \
-                                self.loss_weights[4]*self.loss['yaw_angle_loss']
-                                
-        if self.cfg.loss.aux_loss:
-            self.loss['total'] += self.loss_weights[5]*self.loss['disparity_loss']
-                                  
-        return self.loss
+    def forward(self):
+        raise NotImplementedError("Forward is embedded in training of each epoch")
     

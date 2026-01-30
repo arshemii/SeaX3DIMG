@@ -33,16 +33,16 @@ class SX3DIMG(nn.Module):
             
         self._init_matching_layers()
         self.disp_feat_conv = nn.Conv2d(1, 32, kernel_size=3, padding=1, bias=True)
-        self.match_reduce = nn.Conv2d(80, 64, kernel_size=1, bias=False)
+        self.weighted_refine = nn.Conv2d(32, 32, kernel_size=1, bias=False)
         
 
-        self.bn_match_1 = nn.BatchNorm2d(num_features=64)
-        self.conv2d_match = nn.Conv2d(in_channels=64, out_channels=128,
+        self.bn_match_1 = nn.BatchNorm2d(num_features=32)
+        self.conv2d_match = nn.Conv2d(in_channels=32, out_channels=64,
                                       kernel_size=3, padding=1, bias=False)
-        self.bn_match_2 = nn.BatchNorm2d(num_features=128)
+        self.bn_match_2 = nn.BatchNorm2d(num_features=64)
         self.relu_matching = nn.ReLU()        
         
-        self.conv_agg = nn.Sequential(nn.Conv3d(128, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
+        self.conv_3dvoxel = nn.Sequential(nn.Conv3d(80, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
                                       nn.GroupNorm(num_groups=8, num_channels=self.cfg.model.head.inplanes),
                                       nn.ReLU(inplace=True))
 
@@ -65,13 +65,11 @@ class SX3DIMG(nn.Module):
         else:
             self.head = None
     
-    def matching_module(self, feature_l, feature_r, base):
+    def matching_module(self, feature_l, feature_r):
         """
         feature_l, feature_r:
              Intermediate outputs of HRNet (B, 48, h/4, w/4)
              
-        base:
-            Final output of the HRNet (B, 48, h/4, w/4)
         """
         # Level.forward now returns (h_out, cv_ref, disp, w)
         _, _, disp, conf = self.hrnet_disp(feature_l, feature_r)
@@ -85,24 +83,25 @@ class SX3DIMG(nn.Module):
                                 mode='bilinear', align_corners=True)
 
         disp_feat = self.disp_feat_conv(disp_up)  # (B,32,h/4,w/4)
-   
-        # Concatenate base, disp_feat
-        combined = torch.cat([base, disp_feat], dim=1)  # (B, 32 + 48, h/4, w/4)
+        
+        if not self.cfg.model.conf_voxel:
+            weighted_disp = disp_feat * conf_up # (B,32,h/4,w/4)
+        else:
+            weighted_disp = disp_feat
 
-        combined = self.match_reduce(combined)  # (B, 64, h/4, w/4)
+        weighted_disp = self.weighted_refine(weighted_disp)  # (B, 32, h/4, w/4)
     
-        combined = self.bn_match_1(combined)
-        combined = self.conv2d_match(combined)
-        combined = self.bn_match_2(combined)
-        combined = self.relu_matching(combined)   # (B, 256, h/4, w/4)
+        weighted_disp = self.bn_match_1(weighted_disp)
+        weighted_disp = self.conv2d_match(weighted_disp)  # ch = 64
+        weighted_disp = self.bn_match_2(weighted_disp)
+        weighted_disp = self.relu_matching(weighted_disp)   # (B, 64, h/4, w/4)
     
-        return combined, disp_up, conf_up
+        return weighted_disp, disp_up
     
-    def _voxel_filler(self, voxel, valid_indices, conf_for_points=None):
+    def _voxel_filler(self, voxel, valid_indices):
         """
         voxel: (B, C, N_valid, 1) or (B, C, N_valid)
         valid_indices: (N_valid,) — positions inside full voxel grid
-        conf_for_points: (B,1,N_valid) or None
         Returns:
            full_voxel: (B, C, num_voxels)
         """
@@ -113,12 +112,7 @@ class SX3DIMG(nn.Module):
     
         B, C, N = voxel.shape
         device = voxel.device
-    
-        # ---- Optional confidence weighting ----
-        if conf_for_points is not None:
-            if conf_for_points.dim() == 2:
-                conf_for_points = conf_for_points.unsqueeze(1)
-            voxel = voxel * conf_for_points  # still (B,C,N)
+
     
         # ---- Initialize full voxel volume with zeros (OOB = zero semantics) ----
         full_voxel = torch.zeros(
@@ -134,32 +128,33 @@ class SX3DIMG(nn.Module):
         return full_voxel
     
     
-    def voxelizer(self, tensor, conf_map=None):
+    def voxelizer(self, tensor, base_feat):
         """
         Inputs:
-            tensor:     (B, 256, h/4, w/4) --> matched_tensor
-            conf_map:   (B,1,h/4, w/4)
+            tensor:      (B, 32, h/4, w/4) --> matched_tensor
+            base_feat:   (B,48,h/4, w/4)
         Returns: full_voxel reshaped to (B, C, X, Y, Z)
         """
         B, C, Hf, Wf = tensor.shape
+        _, C_base, _,  _ = base_feat.shape
     
         # grid_flat_filtered shape: (1, N_valid, 1, 2)
         grid_batched = self.grid_flat_filtered.expand(B, -1, -1, -1)  # (B, N_valid, 1, 2)
 
-        sampled = F.grid_sample(tensor, grid_batched, mode='bilinear', align_corners=True)  # (B, C, N_valid, 1)
-
-        if conf_map is not None:
-            conf_sampled = F.grid_sample(conf_map, grid_batched, mode='bilinear', align_corners=True)  # (B,1,N_valid,1)
-            conf_sampled = conf_sampled.squeeze(-1)  # (B,1,N_valid)
-        else:
-            conf_sampled = None
+        sampled_matched = F.grid_sample(tensor, grid_batched,
+                                     mode='bilinear', align_corners=True)  # (B, 32, N_valid, 1)
+        
+        sampled_base = F.grid_sample(base_feat, grid_batched,
+                                     mode='bilinear', align_corners=True)  # (B, 48, N_valid, 1)
     
+        sampled = torch.cat([sampled_matched, sampled_base], dim=1)  # chanells = 48 + 32 = 80
+        
         del grid_batched
         valid_indices = self.oob_mask_flat.nonzero(as_tuple=False).squeeze(1).to(tensor.device)  # (N_valid,) 104031
     
-        full_voxel_flat = self._voxel_filler(sampled, valid_indices, conf_for_points=conf_sampled)  # (B,256,num_voxels)
+        full_voxel_flat = self._voxel_filler(sampled, valid_indices)  # (B,80,num_voxels)
     
-        full_voxel = full_voxel_flat.reshape(B, C, self.cfg.grid_resolution[0],
+        full_voxel = full_voxel_flat.reshape(B, C + C_base, self.cfg.grid_resolution[0],
                                              self.cfg.grid_resolution[1],
                                              self.cfg.grid_resolution[2])
     
@@ -179,23 +174,19 @@ class SX3DIMG(nn.Module):
         _, right_f_inter = self.backbone(img_r)         # shape for outputs: (1, 48, h/4, h/4)
 
         # matching stage
-        # (B, 128, h/4, w/4), (B, 1, h/4, w/4), (B, 1, h/4, w/4)
-        matched_tensor, disp_upsampled, conf_upsampled = self.matching_module(left_f_inter,
-                                                                              right_f_inter,
-                                                                              left_f)
+        # (B, 64, h/4, w/4), (B, 1, h/4, w/4)
+        matched_tensor, disp_upsampled = self.matching_module(left_f_inter, right_f_inter)
+        
         disp_upsampled = F.softplus(disp_upsampled)
         
         if self.cfg.loss.heads == ['disp']:
             return disp_upsampled
-        
-        if not self.cfg.model.conf_voxel:
-            conf_upsampled = None
-            
-        voxel = self.voxelizer(matched_tensor, conf_upsampled) # (B, 128, X, Y, Z)
+
+        voxel = self.voxelizer(matched_tensor, left_f) # (B, 80, X, Y, Z)
         
         del matched_tensor, left_f_inter, right_f_inter
         
-        voxel = self.conv_agg(voxel)  # reduce channels
+        voxel = self.conv_3dvoxel(voxel)  # increase channels
         out = self.head(voxel) # 5 tensors
         
         return out, disp_upsampled
