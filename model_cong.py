@@ -154,7 +154,7 @@ def config_generator():
     
     cfg.max_obj = 18
     
-    cfg.grid_size = (19.7, 7.2, 63.4)  # H from -2 to 10
+    cfg.grid_size = (19.7, 7.2, 63.8)  # H from -2 to 10
     cfg.grid_unc = (0.36, 0.36, 0.39)
     cfg.grid_resolution = tuple(int(round(size / res)) for size, res in zip(cfg.grid_size, cfg.grid_unc))
 
@@ -232,7 +232,7 @@ def config_generator():
     cfg.loss.w_total_previous = [0.08, 0.08, 0.05, 0.10]  # main experiment with 0.15, [0.05, 0.10], [0.02, 0.05, 0.20],  [0.02, 0.02, 0.05, 0.15]
     cfg.loss.w_yaw = 0.90
     cfg.loss.freeze = False
-    cfg.loss.freezed_output = ['disp']
+    cfg.loss.freezed_output = []
     
 
     cfg.loss.alpha = 0.55  # TODO: if model predicts a lot of objects, increase it 

@@ -79,7 +79,7 @@ class Trainer:
             avg_loss_track_yaw = 0.0
         
         print(f"Active: {self.cfg.loss.heads}, freezed: {self.cfg.loss.freezed_output}")
-        print("From stage 5, the losses are: Dim: 0.00084, Center: 0.10376, Class: 0.00652, Obj: 0.00028")
+        # print("From stage 5, the losses are: Dim: 0.00084, Center: 0.10376, Class: 0.00652, Obj: 0.00028")
         print("---------------------------------------------------------------")
         
         w_prev = [self.cfg.loss.w_total_previous[0],
