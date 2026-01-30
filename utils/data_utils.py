@@ -305,7 +305,7 @@ def voxel_assigner_cnt(label, cfg, debug=False):
             for yj in range(y0, y1):
                 for zk in range(z0, z1):
                     dist2 = (xi - i)**2 + (yj - j)**2 + (zk - k)**2
-                    heat_val = torch.exp(-dist2 / (2 * sigma**2))
+                    heat_val = torch.exp(torch.tensor(-dist2 / (2 * sigma**2), dtype=center_heatmap.dtype))
                     center_heatmap[xi, yj, zk] = max(center_heatmap[xi, yj, zk], heat_val)
 
     # keep OOB as -3 (assignments)
