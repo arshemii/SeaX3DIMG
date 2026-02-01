@@ -255,6 +255,8 @@ def voxel_assigner_cnt(label, cfg, debug=False):
 
     # precompute grid coords
     xs, ys, zs = cfg.grid_forward[0][..., 0], cfg.grid_forward[0][..., 1], cfg.grid_forward[0][..., 2]
+    
+    scale = cfg.data.object_AABB_scale  # same scale as voxel_assigner_occ
 
     for gt_idx, det in enumerate(label):
         valid_obj_mask[gt_idx] = 1
@@ -262,6 +264,11 @@ def voxel_assigner_cnt(label, cfg, debug=False):
         cx, cy, cz = det['bbox3d'][3:6]
         cat = int(det['category'])
 
+        # ---- Enforce minimum object size (same strategy as voxel_assigner_occ) ----
+        w = torch.maximum(w, torch.tensor(cfg.grid_unc[0] * scale, device=w.device, dtype=w.dtype))
+        h = torch.maximum(h, torch.tensor(cfg.grid_unc[1] * scale, device=h.device, dtype=h.dtype))
+        l = torch.maximum(l, torch.tensor(cfg.grid_unc[2] * scale, device=l.device, dtype=l.dtype))
+        
         # ---- Assignments (keep as is) ----
         x_min, x_max = cx - w/2, cx + w/2
         y_min, y_max = cy - h/2, cy + h/2
@@ -270,6 +277,8 @@ def voxel_assigner_cnt(label, cfg, debug=False):
         inside = (xs >= x_min) & (xs <= x_max) & \
                  (ys >= y_min) & (ys <= y_max) & \
                  (zs >= z_min) & (zs <= z_max)
+        
+        assert inside.sum() != 0
 
         if cat == cfg.data.ignore_class_id:
             assignments[inside] = cfg.data.ignore_class_id
