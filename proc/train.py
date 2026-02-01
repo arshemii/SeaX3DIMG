@@ -89,7 +89,7 @@ class Trainer:
         w_yaw = self.cfg.loss.w_yaw
 
         
-        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Stage 6, Epoch {epoch}")
+        pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Stage 1, Epoch {epoch}")
         
         for batch_idx, batch in pbar:
                         

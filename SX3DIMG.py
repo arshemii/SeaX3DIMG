@@ -177,7 +177,7 @@ class SX3DIMG(nn.Module):
         # (B, 64, h/4, w/4), (B, 1, h/4, w/4)
         matched_tensor, disp_upsampled = self.matching_module(left_f_inter, right_f_inter)
         
-        disp_upsampled = F.softplus(disp_upsampled)
+        #disp_upsampled = F.softplus(disp_upsampled)
         
         if self.cfg.loss.heads == ['disp']:
             return disp_upsampled
