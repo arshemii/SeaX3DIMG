@@ -51,7 +51,7 @@ def training(cfg):
     device = cfg.device[0]
     
     print("Preparing dataset ...")
-    dataset = kitti_sx3d(cfg, mode = 'train_small')
+    dataset = kitti_sx3d(cfg, mode = 'train')
     
     print("Preparing the model ...")
     model = get_SX3D_model(cfg)
