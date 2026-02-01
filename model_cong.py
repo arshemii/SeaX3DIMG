@@ -151,7 +151,7 @@ def config_generator():
     cfg.radar_fusion = False
     cfg.model.sx3d.init_weight = True
     
-    cfg.max_obj = 18
+    cfg.max_obj = 20
     
     cfg.grid_size = (19.7, 7.2, 63.8)  # H from -2 to 10
     cfg.grid_unc = (0.36, 0.36, 0.39)
