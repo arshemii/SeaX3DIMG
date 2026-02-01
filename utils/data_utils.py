@@ -273,8 +273,9 @@ def voxel_assigner_cnt(label, cfg, debug=False):
 
         if cat == cfg.data.ignore_class_id:
             assignments[inside] = cfg.data.ignore_class_id
-        else:
-            assignments[inside] = gt_idx
+            continue
+
+        assignments[inside] = gt_idx
 
         # ---- Find center voxel ----
         voxel_coords = cfg.grid_forward[0][inside]
