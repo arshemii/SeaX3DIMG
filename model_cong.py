@@ -55,13 +55,12 @@ def config_generator():
     
     
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
-    #cfg.dev.num_epoch = 45
-    cfg.dev.num_epoch = 9
+    cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch
     cfg.dev.grad_steps = 8
-    cfg.dev.eta_min = 7e-6 * cfg.dev.grad_steps # first setup 9e-6
+    cfg.dev.eta_min = 7e-6 * cfg.dev.grad_steps
     cfg.dev.mode = 'train'
-    cfg.dev.lr = 9e-6 * cfg.dev.grad_steps # first setup 1e-5
+    cfg.dev.lr = 9e-6 * cfg.dev.grad_steps
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
