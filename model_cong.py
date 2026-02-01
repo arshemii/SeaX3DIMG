@@ -103,7 +103,7 @@ def config_generator():
     
     cfg.model.unet_cout = 2
     cfg.model.hrnet_cout = 48
-    cfg.model.max_disp = 16
+    cfg.model.max_disp = 32
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
     cfg.model.sx3d.use_checkpoint = False
