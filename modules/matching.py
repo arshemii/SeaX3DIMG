@@ -159,7 +159,7 @@ class LevelInit(nn.Module):
         pad_h = (4 - 1) // 2
         pad_w = (4 - 1) // 2
         rt = F.pad(r, (pad_w, pad_w, pad_h, pad_h))
-        rt = F.conv2d(rt, self.conv_reduce.weight, self.conv_reduce.bias, stride=(4, 4))
+        rt = F.conv2d(rt, self.conv_reduce.weight, self.conv_reduce.bias, stride=(4, 1))
         rt = self.conv_em(rt)
 
         # cost volume: (B, D, H4, W4)
