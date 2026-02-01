@@ -159,12 +159,12 @@ class LevelInit(nn.Module):
         pad_h = (4 - 1) // 2
         pad_w = (4 - 1) // 2
         rt = F.pad(r, (pad_w, pad_w, pad_h, pad_h))
-        rt = F.conv2d(rt, self.conv_reduce.weight, self.conv_reduce.bias, stride=(4, 1))
+        rt = F.conv2d(rt, self.conv_reduce.weight, self.conv_reduce.bias, stride=(4, 4))
         rt = self.conv_em(rt)
 
         # cost volume: (B, D, H4, W4)
-        #lt = F.normalize(lt, p=2, dim=1)
-        #rt = F.normalize(rt, p=2, dim=1)
+        lt = F.normalize(lt, p=2, dim=1)
+        rt = F.normalize(rt, p=2, dim=1)
         cv = make_cost_volume_v2(lt, rt, self.max_disp)  # (B, C, D, H4, W4) with C = channels difference
         # collapse channel difference to cost per disparity by L1-norm across feature channels
         cv = torch.norm(cv, p=1, dim=1, keepdim=True)  # (B, 1, D, H4, W4)
