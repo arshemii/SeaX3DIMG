@@ -255,7 +255,7 @@ def get_SX3D_model(cfg, is_train=True):
         load_weights_from_checkpoint_skip(model, cfg.model.sx3d.checkpoint_exp, cfg.device[0])
         
         if cfg.loss.freeze:
-            print("No grad for frozen layers ...")
+            print("Hey, No grad for frozen layers ...")
             if 'disp' in cfg.loss.freezed_output:
                 for p in model.hrnet_disp.parameters():
                     p.requires_grad = False
