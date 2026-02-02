@@ -138,7 +138,7 @@ class Evaluator():
                 new_cls = "Car"
             elif cls_ == "Truck":
                 new_cls = "Truck"
-            elif cls_ == "Pedestrian":
+            elif cls_ == ("Pedestrian", "Person_sitting"):
                 new_cls = "Person"
             elif cls_ == "Cyclist":
                 new_cls = "Cyclist"

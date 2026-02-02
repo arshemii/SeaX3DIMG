@@ -69,25 +69,26 @@ class Trainer:
         if len(self.cfg.loss.heads) > 1:
             loss_track_obj = 0.0
             avg_loss_track_obj = 0.0
-            loss_track_cls = 0.0
-            avg_loss_track_cls = 0.0
-            loss_track_cnt = 0.0
-            avg_loss_track_cnt = 0.0
-            loss_track_dim = 0.0
-            avg_loss_track_dim = 0.0
-            loss_track_yaw = 0.0
-            avg_loss_track_yaw = 0.0
+            loss_track_disp = 0.0
+            avg_loss_track_disp = 0.0
+            #loss_track_cls = 0.0
+            #avg_loss_track_cls = 0.0
+            #loss_track_cnt = 0.0
+            #avg_loss_track_cnt = 0.0
+            #loss_track_dim = 0.0
+            #avg_loss_track_dim = 0.0
+            #loss_track_yaw = 0.0
+            #avg_loss_track_yaw = 0.0
         
         print(f"Active: {self.cfg.loss.heads}, freezed: {self.cfg.loss.freezed_output}")
         # print("From stage 5, the losses are: Dim: 0.00084, Center: 0.10376, Class: 0.00652, Obj: 0.00028")
         print("---------------------------------------------------------------")
         
-        w_prev = [self.cfg.loss.w_total_previous[0],
-                  self.cfg.loss.w_total_previous[1],
-                  self.cfg.loss.w_total_previous[2],
-                  self.cfg.loss.w_total_previous[3]]    # objecness, classification, center, dim
-        w_yaw = self.cfg.loss.w_yaw
-
+        # w_prev = [self.cfg.loss.w_total_previous[0],
+        #           self.cfg.loss.w_total_previous[1],
+        #           self.cfg.loss.w_total_previous[2],
+        #           self.cfg.loss.w_total_previous[3]]    # objecness, classification, center, dim
+        w_prev = [self.cfg.loss.w_total_previous[0]]
         
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Stage 1, Epoch {epoch}")
         
@@ -114,11 +115,12 @@ class Trainer:
                     del disp, batch["disparity"]
                     
                 if 'obj_head' in self.heads_for_loss:
-                    batch['assignment'] = batch['assignment'].to(self.device)
+                    batch['center_heatmap'] = batch['center_heatmap'].to(self.device)
                     loss['obj_head'] = self.loss_fn.center_hm_loss(outputs[0], batch['center_heatmap'])
                     
                 if 'cls_head' in self.heads_for_loss:
                     batch["label"] = batch["label"].to(self.device)
+                    batch['assignment'] = batch['assignment'].to(self.device)
                     loss['cls_head'] = self.loss_fn.classification_loss(outputs[1], outputs[0],
                                                                           batch['assignment'], batch["label"], batch['center_heatmap'])
                 
@@ -141,8 +143,7 @@ class Trainer:
                     for idx, loss_t in enumerate(self.heads_for_loss[:-1]):
                         loss['total'] += (w_prev[idx] * loss[loss_t])
 
-                    loss['total'] = loss['total'] + \
-                                    (w_yaw * loss[self.heads_for_loss[-1]])
+                    loss['total'] = loss['total'] + loss[self.heads_for_loss[-1]]
               
          
             scaler.scale(loss['total']).backward()
@@ -162,21 +163,20 @@ class Trainer:
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
             else:
                 loss_track_obj += loss['obj_head'].item()
-                loss_track_cnt += loss['cnt_head'].item()
-                loss_track_cls += loss['cls_head'].item()
-                loss_track_dim += loss['dim_head'].item()
-                loss_track_yaw += loss['yaw_head'].item()
-                avg_loss_track_cnt = loss_track_cnt / (batch_idx + 1)
+                loss_track_disp += loss['disp'].item()
+                #loss_track_cnt += loss['cnt_head'].item()
+                #loss_track_cls += loss['cls_head'].item()
+                #loss_track_dim += loss['dim_head'].item()
+                #loss_track_yaw += loss['yaw_head'].item()
+                #avg_loss_track_cnt = loss_track_cnt / (batch_idx + 1)
                 avg_loss_track_obj = loss_track_obj / (batch_idx + 1)
-                avg_loss_track_cls = loss_track_cls / (batch_idx + 1)
-                avg_loss_track_dim = loss_track_dim / (batch_idx + 1)
-                avg_loss_track_yaw = loss_track_yaw / (batch_idx + 1)
+                avg_loss_track_disp = loss_track_disp / (batch_idx + 1)
+                #avg_loss_track_cls = loss_track_cls / (batch_idx + 1)
+                #avg_loss_track_dim = loss_track_dim / (batch_idx + 1)
+                #avg_loss_track_yaw = loss_track_yaw / (batch_idx + 1)
                 pbar.set_postfix({'loss': f"{avg_loss:.4f}",
-                		  'Yaw loss': f"{avg_loss_track_yaw:.5f}",
-                                  'Dim loss': f"{avg_loss_track_dim:.5f}",
-                                  'Center loss': f"{avg_loss_track_cnt:.5f}",
-                                  'Class loss': f"{avg_loss_track_cls:.5f}",
                                   'Obj loss': f"{avg_loss_track_obj:.5f}",
+                                  'disp_loss': f"{avg_loss_track_disp:.5f}",
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
                 
             

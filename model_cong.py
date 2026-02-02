@@ -106,8 +106,8 @@ def config_generator():
     cfg.model.max_disp = 32
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
-    cfg.model.sx3d.use_checkpoint = False
-    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/fullhead.pth'
+    cfg.model.sx3d.use_checkpoint = True
+    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/disp0_027.pth'
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
     
@@ -176,10 +176,10 @@ def config_generator():
     cfg.data.categories = ["Car", "DontCare", "Pedestrian", "Van", "Tram", "Misc", "Person_sitting", "Cyclist", "Truck"]
     cfg.data.cl0 = ["Car", "Van"]
     cfg.data.cl1 = ["Truck"]
-    cfg.data.cl2 = ["Pedestrian"]
+    cfg.data.cl2 = ["Pedestrian", "Person_sitting"]
     cfg.data.cl3 = ["Cyclist"]
     cfg.data.cl4 = ["DontCare", "Tram"]  # no need to predict, must be removed also from data labeling
-    cfg.data.cl5 = ["Misc", "Person_sitting"] # no need to predict, must be removed also from data labeling
+    cfg.data.cl5 = ["Misc"] # no need to predict, must be removed also from data labeling
     cfg.data.ignore_class_id = -2
     
     cfg.data.mean = [np.array([0.485, 0.456, 0.406])]
@@ -227,9 +227,9 @@ def config_generator():
     # Staging:
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
-    cfg.loss.heads = ['disp']
-    cfg.loss.w_total_previous = [0.08, 0.08, 0.05, 0.10]  # main experiment with 0.15, [0.05, 0.10], [0.02, 0.05, 0.20],  [0.02, 0.02, 0.05, 0.15]
-    cfg.loss.w_yaw = 0.90
+    cfg.loss.heads = ['disp', 'obj_head']
+    cfg.loss.w_total_previous = [0.10, 0.08, 0.05, 0.10]  # main experiment with 0.15, [0.05, 0.10], [0.02, 0.05, 0.20],  [0.02, 0.02, 0.05, 0.15]
+    # cfg.loss.w_disp = 0.10
     cfg.loss.freeze = False
     cfg.loss.freezed_output = []
     
@@ -256,7 +256,7 @@ def config_generator():
     cfg.eval.local_maxima_kernel = 7
     cfg.eval.cl0 = "Car, Van"
     cfg.eval.cl1 = "Truck"
-    cfg.eval.cl2 = "Pedestrian"
+    cfg.eval.cl2 = "Pedestrian, Person_sitting"
     cfg.eval.cl3 = "Cyclist"
     cfg.eval.class_names = ["Car", "Truck", "Person", "Cyclist"]
     
