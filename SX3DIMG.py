@@ -205,6 +205,44 @@ def load_weights_from_checkpoint(model, checkpoint_path, device):
     else:
         print("==> No checkpoint provided. Training from scratch or initializing backbone only.")
 
+def load_weights_from_checkpoint_skip(model, checkpoint_path, device):
+    if not checkpoint_path:
+        print("==> No checkpoint provided. Training from scratch or initializing backbone only.")
+        return
+
+    ckpt = torch.load(checkpoint_path, map_location=device)
+
+    # 1) Extract the state dict from checkpoint
+    if "model_state" in ckpt:
+        print("The provided checkpoint does have model_state key !")
+        ckpt_state = ckpt["model_state"]
+    else:
+        print("The provided checkpoint has no 'model_state' key, using raw checkpoint as state_dict.")
+        ckpt_state = ckpt
+
+    model_state = model.state_dict()
+
+    # 2) Filter out keys whose shape doesn't match current model
+    filtered_state = {}
+    skipped = []
+    for k, v in ckpt_state.items():
+        if k in model_state:
+            if model_state[k].shape == v.shape:
+                filtered_state[k] = v
+            else:
+                skipped.append((k, v.shape, model_state[k].shape))
+        else:
+            skipped.append((k, v.shape, None))
+
+    # 3) Update model weights with the filtered ones
+    model_state.update(filtered_state)
+    model.load_state_dict(model_state)  # now safe, all shapes match
+
+    print(f"==> Loaded {len(filtered_state)}/{len(ckpt_state)} tensors from: {checkpoint_path}")
+    if skipped:
+        print("    Skipped parameters (name, ckpt_shape, model_shape):")
+        for name, ckpt_shape, model_shape in skipped:
+            print(f"      - {name}: {ckpt_shape} -> {model_shape}")
 
 def get_SX3D_model(cfg, is_train=True):
     
@@ -214,7 +252,7 @@ def get_SX3D_model(cfg, is_train=True):
     
     # Always try to load full model checkpoint if provided
     if cfg.model.sx3d.use_checkpoint and cfg.model.sx3d.checkpoint_exp:
-        load_weights_from_checkpoint(model, cfg.model.sx3d.checkpoint_exp, cfg.device[0])
+        load_weights_from_checkpoint_skip(model, cfg.model.sx3d.checkpoint_exp, cfg.device[0])
         
         if cfg.loss.freeze:
             print("No grad for frozen layers ...")
@@ -225,10 +263,9 @@ def get_SX3D_model(cfg, is_train=True):
     return model
     
 
-    
-    
-    
-    
+
+
+
     
     
     
