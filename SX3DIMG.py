@@ -42,7 +42,7 @@ class SX3DIMG(nn.Module):
         self.bn_match_2 = nn.BatchNorm2d(num_features=64)
         self.relu_matching = nn.ReLU()        
         
-        self.conv_3dvoxel = nn.Sequential(nn.Conv3d(80, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
+        self.conv_3dvoxel = nn.Sequential(nn.Conv3d(112, self.cfg.model.head.inplanes, 3, 1, padding=1, bias=False),
                                       nn.GroupNorm(num_groups=8, num_channels=self.cfg.model.head.inplanes),
                                       nn.ReLU(inplace=True))
 
@@ -131,7 +131,7 @@ class SX3DIMG(nn.Module):
     def voxelizer(self, tensor, base_feat):
         """
         Inputs:
-            tensor:      (B, 32, h/4, w/4) --> matched_tensor
+            tensor:      (B,64, h/4, w/4) --> matched_tensor
             base_feat:   (B,48,h/4, w/4)
         Returns: full_voxel reshaped to (B, C, X, Y, Z)
         """
