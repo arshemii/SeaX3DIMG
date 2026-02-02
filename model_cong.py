@@ -107,7 +107,7 @@ def config_generator():
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
     cfg.model.sx3d.use_checkpoint = True
-    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/staged_training/disp0_027.pth'
+    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/disp0_027.pth'
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
     
@@ -188,7 +188,7 @@ def config_generator():
     
     
     cfg.model.back.out = "features"
-    cfg.model.back.init_weight = True
+    cfg.model.back.init_weight = False
     cfg.model.back.extra = [{"INP_SIZE": [288, 960],
                             "HEATMAP_SIZE": [72, 240],
                             "INP_SIZE_SCALE": [1],
