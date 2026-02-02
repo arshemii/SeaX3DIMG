@@ -157,13 +157,14 @@ class Trainer:
             avg_loss = running_loss / (batch_idx + 1)
 
             if len(self.cfg.loss.heads) == 1:
-                per_batch_loss = loss['total'].item()
+                per_batch_loss_disp = loss['total'].item()
                 pbar.set_postfix({'loss': f"{avg_loss:.5f}",
-                                  'Disp Loss PB:': f"{per_batch_loss:.5f}",
+                                  'Disp Loss PB:': f"{per_batch_loss_disp:.5f}",
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
             else:
                 loss_track_obj += loss['obj_head'].item()
                 loss_track_disp += loss['disp'].item()
+                per_batch_loss_obj = loss['disp'].item()
                 #loss_track_cnt += loss['cnt_head'].item()
                 #loss_track_cls += loss['cls_head'].item()
                 #loss_track_dim += loss['dim_head'].item()
@@ -176,7 +177,8 @@ class Trainer:
                 #avg_loss_track_yaw = loss_track_yaw / (batch_idx + 1)
                 pbar.set_postfix({'loss': f"{avg_loss:.4f}",
                                   'Obj loss': f"{avg_loss_track_obj:.5f}",
-                                  'disp_loss': f"{avg_loss_track_disp:.5f}",
+                                  'Obj Loss PB:': f"{per_batch_loss_obj:.5f}",
+                                  'disp_loss': f"{avg_loss_track_disp:.4f}",
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
                 
             
