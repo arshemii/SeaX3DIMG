@@ -177,7 +177,7 @@ class Trainer:
                                   'Cls PB:': f"{per_batch_loss_cls:.5f}",
                                   'Obj': f"{avg_loss_track_obj:.5f}",
                                   'disp': f"{avg_loss_track_disp:.4f}",
-                                  'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
+                                  'b': f"{batch_idx+1}/{len(self.dataloader)}"})
                 
             
         if (batch_idx + 1) % self.cfg.dev.grad_steps != 0:
