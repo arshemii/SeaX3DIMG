@@ -23,7 +23,6 @@ class loss3d(nn.Module):
         self.alpha = self.cfg.loss.alpha
         self.gamma = self.cfg.loss.gamma
         self.beta = self.cfg.loss.beta
-        self.object_threshold = self.cfg.loss.object_threshold_loss
         self.zeta = self.cfg.loss.zeta
         self.heatmap_thr = self.cfg.loss.heatmap_thr
         self.center_scale = torch.tensor([self.cfg.grid_unc[0],
@@ -104,13 +103,13 @@ class loss3d(nn.Module):
                 loss_terms.append(focal.mean())
     
             # KL on high-objectness background
-            bg_mask = heat_mask & (assignments[b] == -1)
+            bg_mask = assignments[b] == -1
             if bg_mask.any():
                 pred_bg_voxels = pred_cls_logits[b].permute(1, 2, 3, 0)[bg_mask].clamp(-20, 20)
                 pred_probs = nn.functional.softmax(pred_bg_voxels, dim=-1).clamp(min=1e-6)
                 target_probs = torch.full_like(pred_probs, 1.0 / self.num_c).clamp(min=1e-6)
     
-                high_obj_mask = torch.sigmoid(pred_obj_logits[b, 0][bg_mask]) > self.object_threshold
+                high_obj_mask = torch.sigmoid(pred_obj_logits[b, 0][bg_mask]) > self.heatmap_thr
                 if high_obj_mask.any():
                     pred_probs_high = pred_probs[high_obj_mask]
                     target_probs_high = target_probs[high_obj_mask]
