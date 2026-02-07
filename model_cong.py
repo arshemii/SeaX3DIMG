@@ -58,9 +58,9 @@ def config_generator():
     cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch
     cfg.dev.grad_steps = 8
-    cfg.dev.eta_min = 9e-6 * cfg.dev.grad_steps
+    cfg.dev.eta_min = 2e-6 * cfg.dev.grad_steps
     cfg.dev.mode = 'train'
-    cfg.dev.lr = 2e-5 * cfg.dev.grad_steps
+    cfg.dev.lr = 4e-6 * cfg.dev.grad_steps
     cfg.dev.weight_decay = 1e-4
     cfg.dev.eval_in_train = False
     cfg.dev.continue_training = False
@@ -107,7 +107,7 @@ def config_generator():
     cfg.model.conf_voxel = True
     cfg.model.sx3d.drop_out = 0.10
     cfg.model.sx3d.use_checkpoint = True
-    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/cls_inter.pth'
+    cfg.model.sx3d.checkpoint_exp = './checkpoints_exp/cls0_16.pth'
     cfg.model.sx3d.checkpoint_3d = './checkpoints_3d/'
     cfg.model.sx3d.checkpoint_bev = './checkpoints_bev/'
     
@@ -227,9 +227,8 @@ def config_generator():
     # Staging:
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
-    cfg.loss.heads = ['disp', 'obj_head', 'cls_head']
-    cfg.loss.w_total_previous = [0.05, 0.15, 0.05, 0.10]  # main experiment with 0.15, [0.05, 0.10], [0.02, 0.05, 0.20],  [0.02, 0.02, 0.05, 0.15]
-    # cfg.loss.w_disp = 0.10
+    cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head']
+    cfg.loss.w_total_previous = [0.05, 0.15, 0.25]
     cfg.loss.freeze = False
     cfg.loss.freezed_output = []
     
@@ -239,7 +238,7 @@ def config_generator():
     cfg.loss.beta = 1.4
     cfg.loss.object_threshold_loss = 0.5
     cfg.loss.heatmap_thr = 0.5
-    cfg.loss.zeta = 0.2    # to penalize background voxels if objectness is high
+    cfg.loss.zeta = 0.1    # to penalize background voxels if objectness is high
     cfg.loss.optimized = True
     cfg.loss.debug = False
     cfg.loss.track = True
