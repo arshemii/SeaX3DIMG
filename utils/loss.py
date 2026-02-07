@@ -135,7 +135,8 @@ class loss3d(nn.Module):
         loss_terms = []    
         for b in range(pred_offsets.shape[0]):
             # ---- use GT heatmap mask (near center) ----
-            heat_mask = center_heatmap[b] > self.heatmap_thr
+            #heat_mask = center_heatmap[b] > self.heatmap_thr
+            heat_mask = center_heatmap[b] >= 0.99
     
             # only voxels with valid object assignments and near-center heatmap
             valid_mask = heat_mask & (assignments[b] >= 0)
