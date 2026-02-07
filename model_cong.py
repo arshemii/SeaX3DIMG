@@ -228,9 +228,9 @@ def config_generator():
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
     cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head']
-    cfg.loss.w_total_previous = [0.05, 0.15, 0.25]
-    cfg.loss.freeze = False
-    cfg.loss.freezed_output = []
+    cfg.loss.w_total_previous = [0.05, 0.15, 0.20]
+    cfg.loss.freeze = True
+    cfg.loss.freezed_output = ['disp']
     
 
     cfg.loss.alpha = 0.55  # TODO: if model predicts a lot of objects, increase it 

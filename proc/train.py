@@ -69,8 +69,8 @@ class Trainer:
         if len(self.cfg.loss.heads) > 1:
             loss_track_obj = 0.0
             avg_loss_track_obj = 0.0
-            loss_track_disp = 0.0
-            avg_loss_track_disp = 0.0
+            #loss_track_disp = 0.0
+            #avg_loss_track_disp = 0.0
             loss_track_cls = 0.0
             avg_loss_track_cls = 0.0
             loss_track_cnt = 0.0
@@ -160,12 +160,12 @@ class Trainer:
                                   'Disp Loss PB:': f"{per_batch_loss_disp:.5f}",
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
             else:
-                loss_track_disp += loss['disp'].item()
+                #loss_track_disp += loss['disp'].item()
                 loss_track_obj += loss['obj_head'].item()
                 loss_track_cls += loss['cls_head'].item()
                 loss_track_cnt += loss['cnt_head'].item()
                 
-                avg_loss_track_disp = loss_track_disp / (batch_idx + 1)
+                #avg_loss_track_disp = loss_track_disp / (batch_idx + 1)
                 avg_loss_track_obj = loss_track_obj / (batch_idx + 1)
                 avg_loss_track_cls = loss_track_cls / (batch_idx + 1)
                 avg_loss_track_cnt = loss_track_cnt / (batch_idx + 1)
@@ -182,7 +182,6 @@ class Trainer:
                                   'Cnt PB:': f"{per_batch_loss_cnt:.5f}",
                                   'Cls': f"{avg_loss_track_cls:.3f}",
                                   'Obj': f"{avg_loss_track_obj:.4f}",
-                                  'disp': f"{avg_loss_track_disp:.3f}",
                                   'b': f"{batch_idx+1}/{len(self.dataloader)}"})
                 
             
