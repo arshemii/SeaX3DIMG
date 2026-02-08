@@ -55,7 +55,7 @@ def config_generator():
     
     
     cfg.dev.scheduler = 'CAlr'  # options: 'OClr', 'CAlr', 'CAlrW'
-    cfg.dev.num_epoch = 11
+    cfg.dev.num_epoch = 45
     cfg.dev.t_max = cfg.dev.num_epoch
     cfg.dev.grad_steps = 8
     cfg.dev.eta_min = 9e-7 * cfg.dev.grad_steps
@@ -227,8 +227,8 @@ def config_generator():
     # Staging:
     # experiment with stage 1:
     # cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
-    cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head']
-    cfg.loss.w_total_previous = [0.05, 0.15, 0.20]
+    cfg.loss.heads = ['disp', 'obj_head', 'cls_head', 'cnt_head', 'dim_head', 'yaw_head']
+    cfg.loss.w_total_previous = [0.05, 0.10, 0.10, 0.10, 1.0]
     cfg.loss.freeze = True
     cfg.loss.freezed_output = ['disp']
     
