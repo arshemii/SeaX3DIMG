@@ -67,18 +67,18 @@ class Trainer:
         avg_loss = 0.0
         
         if len(self.cfg.loss.heads) > 1:
-            loss_track_obj = 0.0
-            avg_loss_track_obj = 0.0
+            #loss_track_obj = 0.0
+            #avg_loss_track_obj = 0.0
             #loss_track_disp = 0.0
             #avg_loss_track_disp = 0.0
-            loss_track_cls = 0.0
-            avg_loss_track_cls = 0.0
+            #loss_track_cls = 0.0
+            #avg_loss_track_cls = 0.0
             loss_track_cnt = 0.0
             avg_loss_track_cnt = 0.0
-            #loss_track_dim = 0.0
-            #avg_loss_track_dim = 0.0
-            #loss_track_yaw = 0.0
-            #avg_loss_track_yaw = 0.0
+            loss_track_dim = 0.0
+            avg_loss_track_dim = 0.0
+            loss_track_yaw = 0.0
+            avg_loss_track_yaw = 0.0
         
         print(f"Active: {self.cfg.loss.heads}, freezed: {self.cfg.loss.freezed_output}")
         # print("From stage 5, the losses are: Dim: 0.00084, Center: 0.10376, Class: 0.00652, Obj: 0.00028")
@@ -161,27 +161,27 @@ class Trainer:
                                   'batch': f"{batch_idx+1}/{len(self.dataloader)}"})
             else:
                 #loss_track_disp += loss['disp'].item()
-                loss_track_obj += loss['obj_head'].item()
-                loss_track_cls += loss['cls_head'].item()
+                #loss_track_obj += loss['obj_head'].item()
+                #loss_track_cls += loss['cls_head'].item()
                 loss_track_cnt += loss['cnt_head'].item()
+                loss_track_dim += loss['dim_head'].item()
+                loss_track_yaw += loss['yaw_head'].item()
                 
                 #avg_loss_track_disp = loss_track_disp / (batch_idx + 1)
-                avg_loss_track_obj = loss_track_obj / (batch_idx + 1)
-                avg_loss_track_cls = loss_track_cls / (batch_idx + 1)
+                #avg_loss_track_obj = loss_track_obj / (batch_idx + 1)
+                #avg_loss_track_cls = loss_track_cls / (batch_idx + 1)
                 avg_loss_track_cnt = loss_track_cnt / (batch_idx + 1)
+                avg_loss_track_dim = loss_track_dim / (batch_idx + 1)
+                avg_loss_track_yaw = loss_track_yaw / (batch_idx + 1)
                 
-                per_batch_loss_cnt = loss['cnt_head'].item()
+                #per_batch_loss_cnt = loss['cnt_head'].item()
                 #loss_track_cnt += loss['cnt_head'].item()
-                #loss_track_dim += loss['dim_head'].item()
-                #loss_track_yaw += loss['yaw_head'].item()
                 #avg_loss_track_cnt = loss_track_cnt / (batch_idx + 1)
-                #avg_loss_track_dim = loss_track_dim / (batch_idx + 1)
-                #avg_loss_track_yaw = loss_track_yaw / (batch_idx + 1)
+                
                 pbar.set_postfix({'loss': f"{avg_loss:.4f}",
+                                  'Yaw': f"{avg_loss_track_yaw:.5f}",
+                                  'Dim': f"{avg_loss_track_dim:.5f}",
                                   'Cnt': f"{avg_loss_track_cnt:.5f}",
-                                  'Cnt PB:': f"{per_batch_loss_cnt:.5f}",
-                                  'Cls': f"{avg_loss_track_cls:.3f}",
-                                  'Obj': f"{avg_loss_track_obj:.4f}",
                                   'b': f"{batch_idx+1}/{len(self.dataloader)}"})
                 
             
