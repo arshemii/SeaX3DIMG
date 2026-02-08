@@ -86,7 +86,9 @@ class Trainer:
         
         w_prev = [self.cfg.loss.w_total_previous[0],
                   self.cfg.loss.w_total_previous[1],
-                  self.cfg.loss.w_total_previous[2]]
+                  self.cfg.loss.w_total_previous[2],
+                  self.cfg.loss.w_total_previous[3],
+                  self.cfg.loss.w_total_previous[4]]
         
         pbar = tqdm(enumerate(self.dataloader), total=len(self.dataloader), desc=f"Stage 1, Epoch {epoch}")
         
